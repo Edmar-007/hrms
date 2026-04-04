@@ -2,6 +2,8 @@
 require_once __DIR__.'/../../config/db.php';
 require_once __DIR__.'/../../includes/auth.php';
 require_once __DIR__.'/../../includes/csrf.php';
+require_once __DIR__.'/../../includes/security.php';
+require_once __DIR__.'/../../includes/validator.php';
 require_once __DIR__.'/../../includes/header.php';
 require_once __DIR__.'/../../includes/nav.php';
 require_login();
@@ -24,8 +26,22 @@ if(is_post() && verify_csrf()) {
     $pos = $_POST['position_id'] ?: null;
     $status = $_POST['status'] ?? 'active';
     
-    $st = $pdo->prepare("UPDATE employees SET employee_code=?, email=?, first_name=?, last_name=?, phone=?, basic_salary=?, department_id=?, position_id=?, status=? WHERE id=?");
-    $st->execute([$code, $email, $first, $last, $phone, $salary, $dept, $pos, $status, $id]);
+    if (!v_required($code) || !v_email($email) || !v_required($first) || !v_required($last) || !v_phone($phone) || !v_non_negative_number($salary)) {
+        header("Location: edit.php?id=".$id."&err=validation");
+        exit;
+    }
+
+    $photoPath = $emp['photo_path'] ?? null;
+    if (!empty($_FILES['photo']) && ($_FILES['photo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        [$ok, $mimeOrErr] = upload_is_allowed($_FILES['photo'], ['image/jpeg', 'image/png'], 2 * 1024 * 1024);
+        if ($ok) {
+            $stored = store_upload($_FILES['photo'], __DIR__.'/../../public/uploads/employees', 'emp_'.$id, ['image/jpeg' => 'jpg', 'image/png' => 'png']);
+            if ($stored) $photoPath = '/public/uploads/employees/'.$stored;
+        }
+    }
+    
+    $st = $pdo->prepare("UPDATE employees SET employee_code=?, email=?, first_name=?, last_name=?, phone=?, basic_salary=?, department_id=?, position_id=?, status=?, photo_path=? WHERE id=?");
+    $st->execute([$code, $email, $first, $last, $phone, $salary, $dept, $pos, $status, $photoPath, $id]);
     
     header("Location: index.php?msg=updated");
     exit;
@@ -41,7 +57,7 @@ $positions = $pdo->query("SELECT * FROM positions ORDER BY name")->fetchAll();
 
 <div class="card">
     <div class="card-body">
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
             <?= csrf_input() ?>
             <div class="row g-3">
                 <div class="col-md-6">
@@ -63,6 +79,13 @@ $positions = $pdo->query("SELECT * FROM positions ORDER BY name")->fetchAll();
                 <div class="col-md-6">
                     <label class="form-label">Phone</label>
                     <input type="text" class="form-control" name="phone" value="<?= e($emp['phone']) ?>">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Profile Photo</label>
+                    <input type="file" class="form-control" name="photo" accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+                    <?php if(!empty($emp['photo_path'])): ?>
+                        <small class="text-muted">Current: <a href="<?= BASE_URL . e($emp['photo_path']) ?>" target="_blank">View photo</a></small>
+                    <?php endif; ?>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Basic Salary</label>

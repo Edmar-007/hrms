@@ -26,6 +26,26 @@ foreach ($statements as $statement) {
     }
 }
 
+// Run phase3 incremental schema updates if available
+$phase3 = __DIR__ . '/ensure_phase3.sql';
+if (file_exists($phase3)) {
+    $extraSql = file_get_contents($phase3);
+    $extraStatements = array_filter(array_map('trim', explode(';', $extraSql)));
+    foreach ($extraStatements as $statement) {
+        if (empty($statement)) continue;
+        try {
+            $pdo->exec($statement);
+            $executed++;
+        } catch (PDOException $e) {
+            if (strpos($e->getMessage(), 'already exists') === false &&
+                strpos($e->getMessage(), 'Duplicate') === false &&
+                strpos($e->getMessage(), 'Duplicate column') === false) {
+                $errors[] = $e->getMessage();
+            }
+        }
+    }
+}
+
 ?>
 <!DOCTYPE html>
 <html>

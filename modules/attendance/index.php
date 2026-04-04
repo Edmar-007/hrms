@@ -39,6 +39,7 @@ if($isAdmin) {
         <?php if($isAdmin): ?>
         <a href="scanner.php" class="btn btn-primary"><i class="bi bi-qr-code-scan me-2"></i>QR Scanner</a>
         <a href="breaks.php" class="btn btn-outline-secondary"><i class="bi bi-cup-hot me-2"></i>Break Tracking</a>
+        <a href="correct.php" class="btn btn-outline-primary"><i class="bi bi-pencil-square me-2"></i>Corrections</a>
         <?php endif; ?>
         <?php if($u['employee_id']): ?>
             <?php if(!$todayRecord): ?>

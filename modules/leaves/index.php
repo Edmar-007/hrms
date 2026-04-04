@@ -18,7 +18,7 @@ $cid = $hasSaas ? (company_id() ?? 1) : null;
 if(is_post() && $canApprove && verify_csrf()) {
     $action = $_POST['action'] ?? '';
     $id = (int)($_POST['id'] ?? 0);
-    if(in_array($action, ['approved', 'rejected'])) {
+    if(in_array($action, ['approved', 'rejected', 'cancelled'])) {
         // Fetch current leave request before updating
         if($hasSaas && $cid) {
             $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ? AND lr.company_id = ?");
@@ -30,8 +30,13 @@ if(is_post() && $canApprove && verify_csrf()) {
         $leaveData = $leaveReq->fetch();
 
         if($hasSaas && $cid) {
-            $st = $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=? AND company_id=?");
-            $st->execute([$action, $u['id'], $id, $cid]);
+            if ($action === 'cancelled') {
+                $st = $pdo->prepare("UPDATE leave_requests SET status='rejected', cancelled_at=NOW(), cancelled_by=? WHERE id=? AND company_id=?");
+                $st->execute([$u['id'], $id, $cid]);
+            } else {
+                $st = $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=? AND company_id=?");
+                $st->execute([$action, $u['id'], $id, $cid]);
+            }
         } else {
             $st = $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=?");
             $st->execute([$action, $u['id'], $id]);
@@ -54,6 +59,16 @@ if(is_post() && $canApprove && verify_csrf()) {
                 $pdo->prepare("UPDATE employee_leave_balance SET used = GREATEST(0, used - ?) WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
                     ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
             }
+            if ($action === 'approved') {
+                $usr = $pdo->prepare("SELECT id FROM users WHERE employee_id = ? AND is_active = 1 LIMIT 1");
+                $usr->execute([$leaveData['employee_id']]);
+                if ($x = $usr->fetch()) notify((int)$x['id'], 'leave', 'Leave Approved', 'Your leave request has been approved.', '/hrms/modules/leaves/index.php');
+            } elseif ($action === 'rejected' || $action === 'cancelled') {
+                $usr = $pdo->prepare("SELECT id FROM users WHERE employee_id = ? AND is_active = 1 LIMIT 1");
+                $usr->execute([$leaveData['employee_id']]);
+                if ($x = $usr->fetch()) notify((int)$x['id'], 'leave', 'Leave Rejected/Cancelled', 'Your leave request was rejected or cancelled.', '/hrms/modules/leaves/index.php');
+            }
+            log_activity($action, 'leave_request', $id, ['employee_id' => $leaveData['employee_id']]);
         }
 
         header("Location: index.php?msg=$action"); exit;
@@ -99,9 +114,12 @@ if($canApprove) {
 ?>
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-calendar-check me-2"></i>Leave Requests</h4>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
-        <i class="bi bi-plus-lg me-2"></i>Request Leave
-    </button>
+    <div class="d-flex gap-2">
+        <a href="calendar.php" class="btn btn-outline-secondary"><i class="bi bi-calendar3 me-2"></i>Calendar</a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+            <i class="bi bi-plus-lg me-2"></i>Request Leave
+        </button>
+    </div>
 </div>
 
 <?php if(isset($_GET['msg']) || $actionFailed): ?>
@@ -111,7 +129,7 @@ if($canApprove) {
     if($actionFailed) {
         echo 'Unable to process leave action.';
     } else {
-        $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!'];
+        $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!', 'cancelled' => 'Leave cancelled!'];
         echo $msgs[$_GET['msg']] ?? 'Done!';
     }
     ?>
@@ -129,13 +147,14 @@ if($canApprove) {
                     <th>From</th>
                     <th>To</th>
                     <th>Days</th>
+                    <th>Attachment</th>
                     <th>Status</th>
                     <?php if($canApprove): ?><th>Actions</th><?php endif; ?>
                 </tr>
             </thead>
             <tbody>
             <?php if(empty($rows)): ?>
-                <tr><td colspan="7" class="text-center py-4 text-muted">No leave requests found</td></tr>
+                <tr><td colspan="8" class="text-center py-4 text-muted">No leave requests found</td></tr>
             <?php else: foreach($rows as $r): 
                 $days = (strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400 + 1;
             ?>
@@ -145,6 +164,13 @@ if($canApprove) {
                     <td><?= date('M j, Y', strtotime($r['start_date'])) ?></td>
                     <td><?= date('M j, Y', strtotime($r['end_date'])) ?></td>
                     <td><?= $days ?></td>
+                    <td>
+                        <?php if(!empty($r['attachment_path'])): ?>
+                            <a class="btn btn-sm btn-outline-secondary" target="_blank" href="<?= BASE_URL . e($r['attachment_path']) ?>"><i class="bi bi-paperclip"></i></a>
+                        <?php else: ?>
+                            <span class="text-muted">-</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <?php if($r['status'] === 'pending'): ?>
                             <span class="badge bg-warning"><i class="bi bi-hourglass-split me-1"></i>Pending</span>
@@ -169,6 +195,12 @@ if($canApprove) {
                             <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
                             <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i></button>
                         </form>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Cancel this leave?')">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="action" value="cancelled">
+                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-slash-circle"></i></button>
+                        </form>
                         <?php else: ?>
                         <span class="text-muted small">-</span>
                         <?php endif; ?>
@@ -185,7 +217,7 @@ if($canApprove) {
 <div class="modal fade" id="addModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="post" action="add.php">
+            <form method="post" action="add.php" enctype="multipart/form-data">
                 <?= csrf_input() ?>
                 <div class="modal-header">
                     <h5 class="modal-title"><i class="bi bi-calendar-plus me-2"></i>Request Leave</h5>
@@ -214,6 +246,10 @@ if($canApprove) {
                     <div class="mt-3">
                         <label class="form-label">Reason</label>
                         <textarea class="form-control" name="reason" rows="3" placeholder="Optional reason..."></textarea>
+                    </div>
+                    <div class="mt-3">
+                        <label class="form-label">Supporting Document (optional)</label>
+                        <input type="file" class="form-control" name="attachment" accept=".pdf,.jpg,.jpeg,.png">
                     </div>
                 </div>
                 <div class="modal-footer">

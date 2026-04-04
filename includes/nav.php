@@ -51,6 +51,12 @@ $features = json_decode($company['features'] ?? '{}', true);
         
         <?php if(in_array($u['role'], ['Admin', 'HR Officer'])): ?>
         <div class="nav-section">MANAGEMENT</div>
+        <?php if($u['role'] === 'Admin'): ?>
+        <a href="<?= BASE_URL ?>/modules/users/index.php" class="nav-item <?= $currentDir==='users'?'active':'' ?>">
+            <i class="bi bi-person-gear"></i>
+            <span>User Accounts</span>
+        </a>
+        <?php endif; ?>
         
         <?php if($features['payroll'] ?? true): ?>
         <a href="<?= BASE_URL ?>/modules/payroll/index.php" class="nav-item <?= $currentDir==='payroll'?'active':'' ?>">

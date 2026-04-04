@@ -60,6 +60,23 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $pdo->prepare("DELETE FROM positions WHERE id=? AND company_id=?")->execute([$id, company_id()]);
         $success = "Position deleted!";
     }
+
+    if($action === "update_attendance_policy") {
+        $grace = max(0, (int)($_POST["grace_period_minutes"] ?? 10));
+        $dup = max(1, (int)($_POST["duplicate_scan_seconds"] ?? 3));
+        $seq = isset($_POST["require_action_sequence"]) ? 1 : 0;
+        $gps = isset($_POST["gps_capture_enabled"]) ? 1 : 0;
+        $before = max(0, (int)($_POST["out_of_shift_grace_before_minutes"] ?? 60));
+        $after = max(0, (int)($_POST["out_of_shift_grace_after_minutes"] ?? 60));
+
+        $st = $pdo->prepare("INSERT INTO attendance_settings (company_id, grace_period_minutes, duplicate_scan_seconds, require_action_sequence, gps_capture_enabled, out_of_shift_grace_before_minutes, out_of_shift_grace_after_minutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE grace_period_minutes=VALUES(grace_period_minutes), duplicate_scan_seconds=VALUES(duplicate_scan_seconds),
+            require_action_sequence=VALUES(require_action_sequence), gps_capture_enabled=VALUES(gps_capture_enabled),
+            out_of_shift_grace_before_minutes=VALUES(out_of_shift_grace_before_minutes), out_of_shift_grace_after_minutes=VALUES(out_of_shift_grace_after_minutes)");
+        $st->execute([company_id(), $grace, $dup, $seq, $gps, $before, $after]);
+        $success = "Attendance policy updated!";
+    }
     
     // Reload company data
     $st = $pdo->prepare("SELECT * FROM companies WHERE id = ?");
@@ -85,6 +102,17 @@ $plan = $plan->fetch();
 $empCount = $pdo->prepare("SELECT COUNT(*) as cnt FROM employees WHERE company_id = ? AND status = 'active'");
 $empCount->execute([company_id()]);
 $empCount = $empCount->fetch()["cnt"];
+
+$attSet = $pdo->prepare("SELECT * FROM attendance_settings WHERE company_id = ? LIMIT 1");
+$attSet->execute([company_id()]);
+$attSet = $attSet->fetch() ?: [
+    "grace_period_minutes" => 10,
+    "duplicate_scan_seconds" => 3,
+    "require_action_sequence" => 1,
+    "gps_capture_enabled" => 0,
+    "out_of_shift_grace_before_minutes" => 60,
+    "out_of_shift_grace_after_minutes" => 60
+];
 
 require_once __DIR__."/../../includes/header.php";
 require_once __DIR__."/../../includes/nav.php";
@@ -213,6 +241,51 @@ require_once __DIR__."/../../includes/nav.php";
                             <button type="submit" class="btn btn-primary">
                                 <i class="bi bi-check-lg me-2"></i>Save Changes
                             </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Attendance Scan Policy</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="action" value="update_attendance_policy">
+                            <div class="row g-3">
+                                <div class="col-md-2">
+                                    <label class="form-label">Grace (min)</label>
+                                    <input type="number" min="0" class="form-control" name="grace_period_minutes" value="<?= (int)$attSet["grace_period_minutes"] ?>">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Duplicate window (sec)</label>
+                                    <input type="number" min="1" class="form-control" name="duplicate_scan_seconds" value="<?= (int)$attSet["duplicate_scan_seconds"] ?>">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Before-shift grace (min)</label>
+                                    <input type="number" min="0" class="form-control" name="out_of_shift_grace_before_minutes" value="<?= (int)$attSet["out_of_shift_grace_before_minutes"] ?>">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">After-shift grace (min)</label>
+                                    <input type="number" min="0" class="form-control" name="out_of_shift_grace_after_minutes" value="<?= (int)$attSet["out_of_shift_grace_after_minutes"] ?>">
+                                </div>
+                                <div class="col-md-2 d-flex flex-column justify-content-end">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="require_action_sequence" id="require_action_sequence" <?= !empty($attSet["require_action_sequence"]) ? "checked" : "" ?>>
+                                        <label class="form-check-label" for="require_action_sequence">Strict sequence</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="gps_capture_enabled" id="gps_capture_enabled" <?= !empty($attSet["gps_capture_enabled"]) ? "checked" : "" ?>>
+                                        <label class="form-check-label" for="gps_capture_enabled">Capture GPS</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <button class="btn btn-primary mt-3"><i class="bi bi-check-lg me-2"></i>Save Attendance Policy</button>
                         </form>
                     </div>
                 </div>

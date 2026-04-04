@@ -2,12 +2,15 @@
 require_once __DIR__.'/../config/db.php';
 require_once __DIR__.'/../includes/functions.php';
 require_once __DIR__.'/../includes/csrf.php';
+require_once __DIR__.'/../includes/security.php';
 if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/modules/dashboard.php"); exit; }
 
 $err = '';
 
 if(is_post()){
-  if(!verify_csrf()) { $err = "Invalid request. Please try again."; }
+  $ip = client_ip();
+  if(!rate_limit_check('login:'.$ip, 10, 900)) { $err = "Too many attempts. Try again later."; }
+  else if(!verify_csrf()) { $err = "Invalid request. Please try again."; }
   else {
   $email=trim($_POST['email']??''); $password=$_POST['password']??'';
   
@@ -129,6 +132,7 @@ if(is_post()){
                 </form>
                 
                 <div class="text-center mt-4">
+                    <div class="mb-2"><a href="forgot-password.php" class="text-decoration-none">Forgot password?</a></div>
                     <a href="register.php" class="text-decoration-none">Don't have an account? <strong>Register your company</strong></a>
                 </div>
             </div>

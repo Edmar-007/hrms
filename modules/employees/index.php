@@ -57,9 +57,12 @@ if($hasSaas && $cid) {
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-people me-2"></i>Employees</h4>
     <?php if($canEdit): ?>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
-        <i class="bi bi-person-plus me-2"></i>Add Employee
-    </button>
+    <div class="d-flex gap-2">
+        <a href="import.php" class="btn btn-outline-primary"><i class="bi bi-upload me-2"></i>Import CSV</a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+            <i class="bi bi-person-plus me-2"></i>Add Employee
+        </button>
+    </div>
     <?php endif; ?>
 </div>
 
@@ -94,7 +97,14 @@ if($hasSaas && $cid) {
             <?php else: foreach($rows as $r): ?>
                 <tr>
                     <td><code><?= e($r['employee_code']) ?></code></td>
-                    <td><i class="bi bi-person-circle me-2 text-muted"></i><?= e($r['first_name'].' '.$r['last_name']) ?></td>
+                    <td>
+                        <?php if(!empty($r['photo_path'])): ?>
+                            <img src="<?= BASE_URL . e($r['photo_path']) ?>" alt="photo" style="width:28px;height:28px;border-radius:50%;object-fit:cover" class="me-2">
+                        <?php else: ?>
+                            <i class="bi bi-person-circle me-2 text-muted"></i>
+                        <?php endif; ?>
+                        <?= e($r['first_name'].' '.$r['last_name']) ?>
+                    </td>
                     <td><?= e($r['email']) ?></td>
                     <td><?= e($r['dept_name'] ?? '-') ?></td>
                     <td><?= e($r['pos_name'] ?? '-') ?></td>

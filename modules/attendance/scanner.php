@@ -107,6 +107,7 @@ let html5QrCode = null;
 let isScanning = false;
 let lastScannedCode = '';
 let lastScanTime = 0;
+let lastFeedId = 0;
 
 const statusEl = document.getElementById('scanner-status');
 const btnStart = document.getElementById('btn-start');
@@ -130,10 +131,21 @@ async function onScanSuccess(decodedText) {
     setStatus('<i class="bi bi-hourglass-split me-2"></i>Processing...', 'ready');
     
     try {
+        let gps = null;
+        try {
+            if (navigator.geolocation) {
+                gps = await new Promise((resolve) => navigator.geolocation.getCurrentPosition(
+                    (pos) => resolve({lat: pos.coords.latitude, lng: pos.coords.longitude}),
+                    () => resolve(null),
+                    { enableHighAccuracy: false, timeout: 1500, maximumAge: 60000 }
+                ));
+            }
+        } catch (e) {}
+
         const response = await fetch(BASE_URL + '/modules/attendance/scan_process.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: decodedText })
+            body: JSON.stringify({ code: decodedText, gps: gps, action: 'auto' })
         });
         
         const data = await response.json();
@@ -141,7 +153,7 @@ async function onScanSuccess(decodedText) {
         if (data.success) {
             setStatus('<i class="bi bi-check-circle me-2"></i>' + data.message, 'success');
             showModal('success', data.employee, data.action, data.time, data.shift_warning);
-            setTimeout(() => location.reload(), 2000);
+            await refreshLiveFeed();
         } else {
             setStatus('<i class="bi bi-x-circle me-2"></i>' + data.message, 'error');
             showModal('error', null, data.message);
@@ -149,6 +161,36 @@ async function onScanSuccess(decodedText) {
     } catch (err) {
         setStatus('<i class="bi bi-x-circle me-2"></i>Error processing scan', 'error');
     }
+}
+
+async function refreshLiveFeed() {
+    try {
+        const res = await fetch(BASE_URL + '/modules/attendance/live_feed.php?since_id=' + lastFeedId);
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.rows) || data.rows.length === 0) return;
+        const list = document.querySelector('#recent-scans .list-group');
+        if (!list) return;
+        data.rows.slice().reverse().forEach(r => {
+            if (r.id > lastFeedId) lastFeedId = r.id;
+            const initials = ((r.first_name?.[0] || '') + (r.last_name?.[0] || '')).toUpperCase();
+            const action = r.last_action ? r.last_action.replace('_',' ') : (r.time_out ? 'time out' : 'time in');
+            const t = r.last_scan_at || (r.time_out ? r.time_out : r.time_in);
+            const item = document.createElement('div');
+            item.className = 'list-group-item d-flex align-items-center';
+            item.innerHTML = `
+                <div class="me-3" style="width:42px;height:42px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:10px;display:flex;align-items:center;justify-content:center;color:white;font-weight:600;">${initials}</div>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">${r.first_name} ${r.last_name}</div>
+                    <small class="text-muted">${r.employee_code}</small>
+                </div>
+                <div class="text-end">
+                    <div class="small text-primary text-capitalize">${action}</div>
+                    <small class="text-muted">${t ? new Date('1970-01-01T' + t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</small>
+                </div>`;
+            list.prepend(item);
+            while (list.children.length > 10) list.removeChild(list.lastChild);
+        });
+    } catch (e) {}
 }
 
 function showModal(type, employee, action, time, shiftWarning) {
@@ -215,6 +257,7 @@ btnStop.addEventListener('click', stopScanner);
 // Auto-start on load
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(startScanner, 500);
+    setInterval(refreshLiveFeed, 5000);
 });
 </script>
 
