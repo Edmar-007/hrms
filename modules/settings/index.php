@@ -8,6 +8,7 @@ require_role(["Admin","HR Officer"]);
 $pageTitle = "Settings";
 $company = company();
 $user = $_SESSION["user"];
+$cid = company_id() ?? 1;
 
 // Handle form submissions
 $success = $error = "";
@@ -27,22 +28,22 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $dateFmt = $_POST["date_format"]    ?? "M j, Y";
 
         $st = $pdo->prepare("UPDATE companies SET name=?, email=?, phone=?, address=?, timezone=?, currency=? WHERE id=?");
-        if($st->execute([$name, $email, $phone, $address, $tz, $cur, company_id()])) {
+        if($st->execute([$name, $email, $phone, $address, $tz, $cur, $cid])) {
             $_SESSION["company"]["name"] = $name;
             $success = "Company information updated!";
-            log_activity("update", "company", company_id());
+            log_activity("update", "company", $cid);
         }
         // Store optional work schedule in company meta if columns exist
         try {
             $pdo->prepare("UPDATE companies SET work_day_start=?, work_day_end=?, date_format=? WHERE id=?")
-                ->execute([$wdStart, $wdEnd, $dateFmt, company_id()]);
+                ->execute([$wdStart, $wdEnd, $dateFmt, $cid]);
         } catch(PDOException $e) { /* columns may not exist yet – silently skip */ }
     }
 
     if($action === "add_department") {
         $name = trim($_POST["dept_name"]);
         if($name) {
-            $pdo->prepare("INSERT IGNORE INTO departments (company_id, name) VALUES (?, ?)")->execute([company_id(), $name]);
+            $pdo->prepare("INSERT IGNORE INTO departments (company_id, name) VALUES (?, ?)")->execute([$cid, $name]);
             $success = "Department added!";
         }
     }
@@ -51,21 +52,21 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $id   = (int)$_POST["id"];
         $name = trim($_POST["dept_name"]);
         if($name && $id) {
-            $pdo->prepare("UPDATE departments SET name=? WHERE id=? AND company_id=?")->execute([$name, $id, company_id()]);
+            $pdo->prepare("UPDATE departments SET name=? WHERE id=? AND company_id=?")->execute([$name, $id, $cid]);
             $success = "Department updated!";
         }
     }
 
     if($action === "delete_department") {
         $id = (int)$_POST["id"];
-        $pdo->prepare("DELETE FROM departments WHERE id=? AND company_id=?")->execute([$id, company_id()]);
+        $pdo->prepare("DELETE FROM departments WHERE id=? AND company_id=?")->execute([$id, $cid]);
         $success = "Department deleted!";
     }
 
     if($action === "add_position") {
         $name = trim($_POST["pos_name"]);
         if($name) {
-            $pdo->prepare("INSERT IGNORE INTO positions (company_id, name) VALUES (?, ?)")->execute([company_id(), $name]);
+            $pdo->prepare("INSERT IGNORE INTO positions (company_id, name) VALUES (?, ?)")->execute([$cid, $name]);
             $success = "Position added!";
         }
     }
@@ -74,14 +75,14 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $id   = (int)$_POST["id"];
         $name = trim($_POST["pos_name"]);
         if($name && $id) {
-            $pdo->prepare("UPDATE positions SET name=? WHERE id=? AND company_id=?")->execute([$name, $id, company_id()]);
+            $pdo->prepare("UPDATE positions SET name=? WHERE id=? AND company_id=?")->execute([$name, $id, $cid]);
             $success = "Position updated!";
         }
     }
 
     if($action === "delete_position") {
         $id = (int)$_POST["id"];
-        $pdo->prepare("DELETE FROM positions WHERE id=? AND company_id=?")->execute([$id, company_id()]);
+        $pdo->prepare("DELETE FROM positions WHERE id=? AND company_id=?")->execute([$id, $cid]);
         $success = "Position deleted!";
     }
 
@@ -93,7 +94,7 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
             $hasCid = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch();
             if($hasCid) {
                 $pdo->prepare("INSERT IGNORE INTO leave_types (company_id, name, days_allowed, is_paid) VALUES (?,?,?,?)")
-                    ->execute([company_id(), $name, $days, $isPaid]);
+                    ->execute([$cid, $name, $days, $isPaid]);
             } else {
                 $pdo->prepare("INSERT IGNORE INTO leave_types (name, days_allowed, is_paid) VALUES (?,?,?)")
                     ->execute([$name, $days, $isPaid]);
@@ -111,7 +112,7 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
             $hasCid = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch();
             if($hasCid) {
                 $pdo->prepare("UPDATE leave_types SET name=?, days_allowed=?, is_paid=? WHERE id=? AND company_id=?")
-                    ->execute([$name, $days, $isPaid, $id, company_id()]);
+                    ->execute([$name, $days, $isPaid, $id, $cid]);
             } else {
                 $pdo->prepare("UPDATE leave_types SET name=?, days_allowed=?, is_paid=? WHERE id=?")
                     ->execute([$name, $days, $isPaid, $id]);
@@ -124,7 +125,7 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $id = (int)$_POST["id"];
         $hasCid = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch();
         if($hasCid) {
-            $pdo->prepare("DELETE FROM leave_types WHERE id=? AND company_id=?")->execute([$id, company_id()]);
+            $pdo->prepare("DELETE FROM leave_types WHERE id=? AND company_id=?")->execute([$id, $cid]);
         } else {
             $pdo->prepare("DELETE FROM leave_types WHERE id=?")->execute([$id]);
         }
@@ -155,23 +156,23 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
 
     // Reload company data
     $st = $pdo->prepare("SELECT * FROM companies WHERE id = ?");
-    $st->execute([company_id()]);
+    $st->execute([$cid]);
     $company = $st->fetch();
     $_SESSION["company"] = array_merge($_SESSION["company"] ?? [], $company);
 }
 
 // Get departments and positions
 $departments = $pdo->prepare("SELECT * FROM departments WHERE company_id = ? ORDER BY name");
-$departments->execute([company_id()]); $departments = $departments->fetchAll();
+$departments->execute([$cid]); $departments = $departments->fetchAll();
 
 $positions = $pdo->prepare("SELECT * FROM positions WHERE company_id = ? ORDER BY name");
-$positions->execute([company_id()]); $positions = $positions->fetchAll();
+$positions->execute([$cid]); $positions = $positions->fetchAll();
 
 // Leave types
 $hasCidLt = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch();
 if($hasCidLt) {
     $ltSt = $pdo->prepare("SELECT * FROM leave_types WHERE company_id=? ORDER BY name");
-    $ltSt->execute([company_id()]); $leaveTypes = $ltSt->fetchAll();
+    $ltSt->execute([$cid]); $leaveTypes = $ltSt->fetchAll();
 } else {
     $leaveTypes = $pdo->query("SELECT * FROM leave_types ORDER BY name")->fetchAll();
 }
@@ -182,7 +183,7 @@ $plan->execute([$company["plan"] ?? "free"]);
 $plan = $plan->fetch();
 
 $empCount = $pdo->prepare("SELECT COUNT(*) as cnt FROM employees WHERE company_id=? AND status='active'");
-$empCount->execute([company_id()]); $empCount = $empCount->fetch()["cnt"];
+$empCount->execute([$cid]); $empCount = $empCount->fetch()["cnt"];
 
 // Determine active tab from query string (for post-redirect-get pattern)
 $activeTab = $_GET["tab"] ?? "company";

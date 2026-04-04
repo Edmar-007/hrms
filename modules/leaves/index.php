@@ -47,12 +47,22 @@ if(is_post() && $canApprove && verify_csrf()) {
 
             if ($action === 'approved' && $prevStatus === 'pending') {
                 // Deduct days from leave balance
-                $pdo->prepare("UPDATE employee_leave_balance SET used = used + ? WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
-                    ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
+                if ($hasSaas && $cid) {
+                    $pdo->prepare("UPDATE employee_leave_balance SET used = used + ? WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
+                        ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
+                } else {
+                    $pdo->prepare("UPDATE employee_leave_balance SET used = used + ? WHERE employee_id = ? AND leave_type_id = ? AND year = ?")
+                        ->execute([$leaveDays, $empId, $ltId, $year]);
+                }
             } elseif ($action === 'rejected' && $prevStatus === 'approved') {
                 // Revert previously approved leave
-                $pdo->prepare("UPDATE employee_leave_balance SET used = GREATEST(0, used - ?) WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
-                    ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
+                if ($hasSaas && $cid) {
+                    $pdo->prepare("UPDATE employee_leave_balance SET used = GREATEST(0, used - ?) WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
+                        ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
+                } else {
+                    $pdo->prepare("UPDATE employee_leave_balance SET used = GREATEST(0, used - ?) WHERE employee_id = ? AND leave_type_id = ? AND year = ?")
+                        ->execute([$leaveDays, $empId, $ltId, $year]);
+                }
             }
         }
 
