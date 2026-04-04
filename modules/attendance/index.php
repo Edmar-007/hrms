@@ -67,71 +67,102 @@ if($isAdmin) {
     <?php if($todayRecord['time_out']): ?>
         — Timed out at <?= date('h:i A', strtotime($todayRecord['time_out'])) ?>
     <?php else: ?>
-        — <span class="text-success">Currently working</span>
+        — <span class="fw-semibold text-success">Currently working</span>
     <?php endif; ?>
 </div>
 <?php endif; ?>
 
 <div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-clock-history me-2"></i>Attendance Records</span>
-        <span class="badge bg-primary"><?= count($rows) ?> records</span>
+    <!-- Toolbar -->
+    <div class="table-toolbar">
+        <div class="input-group" style="max-width:300px;">
+            <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" id="attSearch" class="form-control border-start-0 ps-0" placeholder="Search employee or code…">
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <select id="attStatusFilter" class="form-select form-select-sm" style="width:auto;">
+                <option value="">All Status</option>
+                <option value="complete">Complete</option>
+                <option value="working">Working</option>
+            </select>
+            <span class="badge bg-primary table-count-badge" id="attCount"><?= count($rows) ?> records</span>
+        </div>
     </div>
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
+
+    <div class="table-responsive-wrapper">
+        <table class="table table-hover mb-0" id="attTable">
             <thead>
                 <tr>
                     <th>Employee</th>
                     <th>Date</th>
                     <th>Time In</th>
                     <th>Time Out</th>
-                    <th>Hours</th>
+                    <th>Duration</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
             <?php if(empty($rows)): ?>
-                <tr><td colspan="6" class="text-center py-4 text-muted">No attendance records found</td></tr>
+                <tr><td colspan="6" class="text-center py-5 text-muted">
+                    <i class="bi bi-clock-history fs-2 d-block mb-2 opacity-25"></i>No attendance records found
+                </td></tr>
             <?php else: foreach($rows as $r): 
                 $hours = '';
+                $durMin = 0;
                 if($r['time_in'] && $r['time_out']) {
                     $diff = strtotime($r['time_out']) - strtotime($r['time_in']);
-                    $hours = round($diff / 3600, 1) . 'h';
+                    $durMin = round($diff / 60);
+                    $h = floor($durMin / 60);
+                    $m = $durMin % 60;
+                    $hours = $h . 'h ' . str_pad($m, 2, '0', STR_PAD_LEFT) . 'm';
                 }
+                $statusKey = $r['time_out'] ? 'complete' : 'working';
             ?>
-                <tr>
+                <tr data-status="<?= $statusKey ?>"
+                    data-search="<?= strtolower(e($r['first_name'].' '.$r['last_name'].' '.$r['employee_code'])) ?>">
                     <td>
-                        <div class="d-flex align-items-center">
-                            <div class="me-2" style="width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-weight:600;font-size:0.8rem;">
-                                <?= strtoupper(substr($r['first_name'], 0, 1) . substr($r['last_name'], 0, 1)) ?>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="avatar-sm" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);">
+                                <?= strtoupper(substr($r['first_name'],0,1).substr($r['last_name'],0,1)) ?>
                             </div>
                             <div>
                                 <div class="fw-semibold"><?= e($r['first_name'].' '.$r['last_name']) ?></div>
-                                <small class="text-muted"><?= e($r['employee_code']) ?></small>
+                                <small class="text-muted"><code><?= e($r['employee_code']) ?></code></small>
                             </div>
                         </div>
                     </td>
-                    <td><?= date('M j, Y', strtotime($r['date'])) ?></td>
+                    <td>
+                        <div class="fw-semibold"><?= date('M j, Y', strtotime($r['date'])) ?></div>
+                        <small class="text-muted"><?= date('l', strtotime($r['date'])) ?></small>
+                    </td>
                     <td>
                         <?php if($r['time_in']): ?>
-                            <i class="bi bi-box-arrow-in-right text-success me-1"></i><?= date('h:i A', strtotime($r['time_in'])) ?>
+                            <span class="text-success fw-semibold"><i class="bi bi-box-arrow-in-right me-1"></i><?= date('h:i A', strtotime($r['time_in'])) ?></span>
                         <?php else: ?>
-                            -
+                            <span class="text-muted">—</span>
                         <?php endif; ?>
                     </td>
                     <td>
                         <?php if($r['time_out']): ?>
-                            <i class="bi bi-box-arrow-right text-warning me-1"></i><?= date('h:i A', strtotime($r['time_out'])) ?>
+                            <span class="text-warning fw-semibold"><i class="bi bi-box-arrow-right me-1"></i><?= date('h:i A', strtotime($r['time_out'])) ?></span>
                         <?php else: ?>
-                            -
+                            <span class="text-muted">—</span>
                         <?php endif; ?>
                     </td>
-                    <td><?= $hours ?: '-' ?></td>
+                    <td>
+                        <?php if($hours): ?>
+                            <span class="badge bg-info bg-opacity-75 text-dark">
+                                <i class="bi bi-clock me-1"></i><?= $hours ?>
+                            </span>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <?php if($r['time_out']): ?>
                             <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Complete</span>
                         <?php else: ?>
-                            <span class="badge bg-warning"><i class="bi bi-clock me-1"></i>Working</span>
+                            <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Working</span>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -140,5 +171,26 @@ if($isAdmin) {
         </table>
     </div>
 </div>
+
+<script>
+const attSearch = document.getElementById('attSearch');
+const attFilter = document.getElementById('attStatusFilter');
+const attCount  = document.getElementById('attCount');
+
+function filterAtt() {
+    const q = attSearch.value.toLowerCase();
+    const s = attFilter.value;
+    let v = 0;
+    document.querySelectorAll('#attTable tbody tr[data-status]').forEach(row => {
+        const ms = !q || row.dataset.search.includes(q);
+        const mf = !s || row.dataset.status === s;
+        row.style.display = (ms && mf) ? '' : 'none';
+        if (ms && mf) v++;
+    });
+    attCount.textContent = v + ' records';
+}
+if (attSearch) attSearch.addEventListener('input',  filterAtt);
+if (attFilter) attFilter.addEventListener('change', filterAtt);
+</script>
 
 <?php require_once __DIR__.'/../../includes/footer.php'; ?>
