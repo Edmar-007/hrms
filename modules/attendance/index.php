@@ -38,12 +38,14 @@ if($isAdmin) {
     <div class="d-flex gap-2 flex-wrap">
         <?php if($isAdmin): ?>
         <a href="scanner.php" class="btn btn-primary"><i class="bi bi-qr-code-scan me-2"></i>QR Scanner</a>
+        <a href="breaks.php" class="btn btn-outline-secondary"><i class="bi bi-cup-hot me-2"></i>Break Tracking</a>
         <?php endif; ?>
         <?php if($u['employee_id']): ?>
             <?php if(!$todayRecord): ?>
                 <a class="btn btn-success" href="time_in.php"><i class="bi bi-box-arrow-in-right me-2"></i>Manual Time In</a>
             <?php elseif(!$todayRecord['time_out']): ?>
                 <a class="btn btn-warning" href="time_out.php"><i class="bi bi-box-arrow-right me-2"></i>Manual Time Out</a>
+                <a class="btn btn-outline-secondary" href="breaks.php"><i class="bi bi-cup-hot me-2"></i>Breaks</a>
             <?php endif; ?>
         <?php endif; ?>
     </div>

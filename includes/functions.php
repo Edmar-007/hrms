@@ -184,7 +184,7 @@ function calculate_13th_month($employeeId, $year) {
         $absence = $pdo->prepare("
             SELECT COUNT(*) as absence_days FROM attendance_exceptions
             WHERE company_id = ? AND employee_id = ?
-            AND exception_type = 'absence' YEAR(exception_date) = ? AND is_approved = 1
+            AND exception_type = 'absence' AND YEAR(exception_date) = ? AND is_approved = 1
         ");
         $absence->execute([$cid, $employeeId, $year]);
         $absenceDays = $absence->fetch()['absence_days'];

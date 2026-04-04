@@ -91,6 +91,10 @@ require_role(['Admin', 'HR Officer', 'Manager']);
                 <div id="modal-icon" style="font-size:4rem;margin-bottom:1rem;"></div>
                 <h4 id="modal-title"></h4>
                 <p id="modal-message" class="text-muted mb-0"></p>
+                <div id="modal-shift-warning" class="alert alert-warning mt-3 mb-0 d-none">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span id="modal-shift-warning-text"></span>
+                </div>
             </div>
         </div>
     </div>
@@ -136,7 +140,7 @@ async function onScanSuccess(decodedText) {
         
         if (data.success) {
             setStatus('<i class="bi bi-check-circle me-2"></i>' + data.message, 'success');
-            showModal('success', data.employee, data.action, data.time);
+            showModal('success', data.employee, data.action, data.time, data.shift_warning);
             setTimeout(() => location.reload(), 2000);
         } else {
             setStatus('<i class="bi bi-x-circle me-2"></i>' + data.message, 'error');
@@ -147,10 +151,12 @@ async function onScanSuccess(decodedText) {
     }
 }
 
-function showModal(type, employee, action, time) {
+function showModal(type, employee, action, time, shiftWarning) {
     const iconEl = document.getElementById('modal-icon');
     const titleEl = document.getElementById('modal-title');
     const msgEl = document.getElementById('modal-message');
+    const warnEl = document.getElementById('modal-shift-warning');
+    const warnTextEl = document.getElementById('modal-shift-warning-text');
     
     if (type === 'success') {
         iconEl.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
@@ -160,6 +166,13 @@ function showModal(type, employee, action, time) {
         iconEl.innerHTML = '<i class="bi bi-x-circle-fill text-danger"></i>';
         titleEl.textContent = 'Scan Failed';
         msgEl.textContent = action;
+    }
+
+    if (shiftWarning) {
+        warnTextEl.textContent = shiftWarning;
+        warnEl.classList.remove('d-none');
+    } else {
+        warnEl.classList.add('d-none');
     }
     
     successModal.show();

@@ -29,6 +29,36 @@ $employeeName = $employee['first_name'] . ' ' . $employee['last_name'];
 $date = date('Y-m-d');
 $time = date('H:i:s');
 
+// Check employee's shift for today and validate time
+$shiftWarning = null;
+$shiftSt = $pdo->prepare("
+    SELECT s.* FROM shifts s
+    JOIN shift_assignments sa ON sa.shift_id = s.id
+    WHERE sa.company_id = ? AND sa.employee_id = ?
+    AND sa.effective_from <= ?
+    AND (sa.effective_to IS NULL OR sa.effective_to >= ?)
+    AND s.is_active = 1
+    LIMIT 1
+");
+$hasSaasCheck = $pdo->query("SHOW COLUMNS FROM attendance LIKE 'company_id'")->fetch();
+$cidForShift = $hasSaasCheck ? (company_id() ?? 1) : 1;
+$shiftSt->execute([$cidForShift, $employeeId, $date, $date]);
+$empShift = $shiftSt->fetch();
+
+if ($empShift) {
+    $nowMinutes = (int)date('H') * 60 + (int)date('i');
+    $shiftStart = (int)substr($empShift['start_time'], 0, 2) * 60 + (int)substr($empShift['start_time'], 3, 2);
+    $shiftEnd   = (int)substr($empShift['end_time'],   0, 2) * 60 + (int)substr($empShift['end_time'],   3, 2);
+
+    // Allow 60 minutes before shift start and after shift end
+    $graceBefore = 60;
+    $graceAfter  = 60;
+
+    if ($nowMinutes < ($shiftStart - $graceBefore) || $nowMinutes > ($shiftEnd + $graceAfter)) {
+        $shiftWarning = 'Scan outside shift hours (' . date('h:i A', strtotime($empShift['start_time'])) . ' – ' . date('h:i A', strtotime($empShift['end_time'])) . ')';
+    }
+}
+
 // Check today's attendance
 $st = $pdo->prepare("SELECT * FROM attendance WHERE employee_id = ? AND date = ?");
 $st->execute([$employeeId, $date]);
@@ -52,7 +82,8 @@ if(!$attendance) {
         'action' => 'Time In',
         'employee' => $employeeName,
         'time' => date('h:i A'),
-        'message' => $employeeName . ' - Time In recorded'
+        'message' => $employeeName . ' - Time In recorded',
+        'shift_warning' => $shiftWarning
     ]);
 } elseif(!$attendance['time_out']) {
     // Time Out
@@ -64,7 +95,8 @@ if(!$attendance) {
         'action' => 'Time Out',
         'employee' => $employeeName,
         'time' => date('h:i A'),
-        'message' => $employeeName . ' - Time Out recorded'
+        'message' => $employeeName . ' - Time Out recorded',
+        'shift_warning' => $shiftWarning
     ]);
 } else {
     // Already completed

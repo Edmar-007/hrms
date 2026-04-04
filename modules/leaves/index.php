@@ -18,8 +18,33 @@ if(isset($_GET['action'], $_GET['id']) && $canApprove) {
     $action = $_GET['action'];
     $id = intval($_GET['id']);
     if(in_array($action, ['approved', 'rejected'])) {
+        // Fetch current leave request before updating
+        $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ?");
+        $leaveReq->execute([$id]);
+        $leaveData = $leaveReq->fetch();
+
         $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=?")
             ->execute([$action, $u['id'], $id]);
+
+        // Auto-update leave balance
+        if ($leaveData) {
+            $leaveDays = (int) ceil((strtotime($leaveData['end_date']) - strtotime($leaveData['start_date'])) / 86400) + 1;
+            $year = (int) date('Y', strtotime($leaveData['start_date']));
+            $empId = $leaveData['employee_id'];
+            $ltId  = $leaveData['leave_type_id'];
+            $prevStatus = $leaveData['status'];
+
+            if ($action === 'approved' && $prevStatus === 'pending') {
+                // Deduct days from leave balance
+                $pdo->prepare("UPDATE employee_leave_balance SET used = used + ? WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
+                    ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
+            } elseif ($action === 'rejected' && $prevStatus === 'approved') {
+                // Revert previously approved leave
+                $pdo->prepare("UPDATE employee_leave_balance SET used = GREATEST(0, used - ?) WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
+                    ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
+            }
+        }
+
         header("Location: index.php?msg=$action"); exit;
     }
 }

@@ -100,7 +100,7 @@ $deductions = array_filter($allComponents, fn($c) => $c['component_type'] === 'd
 <?php if (isset($_GET['msg'])): ?>
 <div class="alert alert-success alert-dismissible fade show" role="alert">
     <i class="bi bi-check-circle me-2"></i>
-    <?= $_GET['msg'] === 'added' ? 'Component added!' : $_GET['msg'] === 'updated' ? 'Component updated!' : $_GET['msg'] === 'deleted' ? 'Component deleted!' : '' ?>
+    <?= $_GET['msg'] === 'added' ? 'Component added!' : ($_GET['msg'] === 'updated' ? 'Component updated!' : ($_GET['msg'] === 'deleted' ? 'Component deleted!' : '')) ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>

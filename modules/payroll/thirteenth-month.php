@@ -122,7 +122,7 @@ $pendingEmployees = $employees->fetchAll();
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         <i class="bi bi-check-circle me-2"></i>
         <?= $_GET['msg'] === 'computed' ? '13th month pay computed successfully!' :
-            $_GET['msg'] === 'finalized' ? 'Record finalized!' : '' ?>
+            ($_GET['msg'] === 'finalized' ? 'Record finalized!' : '') ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
 <?php endif; ?>
@@ -205,7 +205,7 @@ $pendingEmployees = $employees->fetchAll();
                         <tfoot>
                             <tr class="table-dark">
                                 <td colspan="4" class="text-end fw-bold">Total:</td>
-                                <td class="text-end fw-bold text-warning">-₱<?= number_format(array_sum(array_column($allRecords, function($r) { return $r['less_absences'] + $r['less_unpaid_leave']; })), 2) ?></td>
+                                <td class="text-end fw-bold text-warning">-₱<?= number_format(array_sum(array_map(function($r) { return $r['less_absences'] + $r['less_unpaid_leave']; }, $allRecords)), 2) ?></td>
                                 <td class="text-end fw-bold text-success">₱<?= number_format($totalFinalAmount, 2) ?></td>
                                 <td colspan="2"></td>
                             </tr>

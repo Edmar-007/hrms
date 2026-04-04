@@ -88,7 +88,7 @@ $allShifts = $shifts->fetchAll();
 <?php if (isset($_GET['msg'])): ?>
 <div class="alert alert-success alert-dismissible fade show" role="alert">
     <i class="bi bi-check-circle me-2"></i>
-    <?= $_GET['msg'] === 'created' ? 'Shift created successfully!' : $_GET['msg'] === 'updated' ? 'Updated successfully!' : '' ?>
+    <?= $_GET['msg'] === 'created' ? 'Shift created successfully!' : ($_GET['msg'] === 'updated' ? 'Updated successfully!' : '') ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
