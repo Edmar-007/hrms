@@ -170,17 +170,19 @@ $totalInactive = count($rows) - $totalActive;
                     </td>
                     <?php if($canEdit): ?>
                     <td class="action-btns text-center">
-                        <a href="qrcode.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-primary" title="View QR Code" data-bs-toggle="tooltip"><i class="bi bi-qr-code"></i></a>
-                        <a href="edit.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-info" title="Edit Employee" data-bs-toggle="tooltip"><i class="bi bi-pencil"></i></a>
+                        <a href="qrcode.php?id=<?= (int)$r['id'] ?>" class="btn btn-sm btn-primary" title="View QR Code" data-bs-toggle="tooltip"><i class="bi bi-qr-code"></i></a>
+                        <a href="edit.php?id=<?= (int)$r['id'] ?>" class="btn btn-sm btn-info" title="Edit Employee" data-bs-toggle="tooltip"><i class="bi bi-pencil"></i></a>
                         <?php if($r['status'] === 'active'): ?>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Deactivate <?= e(addslashes($r['first_name'].' '.$r['last_name'])) ?>?')">
+                        <form method="post" class="d-inline confirm-form"
+                              data-msg="<?= htmlspecialchars('Deactivate ' . $r['first_name'] . ' ' . $r['last_name'] . '?', ENT_QUOTES) ?>">
                             <?= csrf_input() ?>
                             <input type="hidden" name="action" value="deactivate">
                             <input type="hidden" name="employee_id" value="<?= (int)$r['id'] ?>">
                             <button type="submit" class="btn btn-sm btn-danger" title="Deactivate" data-bs-toggle="tooltip"><i class="bi bi-person-dash"></i></button>
                         </form>
                         <?php else: ?>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Reactivate <?= e(addslashes($r['first_name'].' '.$r['last_name'])) ?>?')">
+                        <form method="post" class="d-inline confirm-form"
+                              data-msg="<?= htmlspecialchars('Reactivate ' . $r['first_name'] . ' ' . $r['last_name'] . '?', ENT_QUOTES) ?>">
                             <?= csrf_input() ?>
                             <input type="hidden" name="action" value="reactivate">
                             <input type="hidden" name="employee_id" value="<?= (int)$r['id'] ?>">
@@ -287,6 +289,14 @@ function filterTable() {
 
 if (searchInput)  searchInput.addEventListener('input',  filterTable);
 if (statusFilter) statusFilter.addEventListener('change', filterTable);
+
+// Confirm forms — read message from data-msg attribute (XSS-safe)
+document.querySelectorAll('form.confirm-form').forEach(form => {
+    form.addEventListener('submit', function(e) {
+        const msg = this.dataset.msg || 'Are you sure?';
+        if (!confirm(msg)) e.preventDefault();
+    });
+});
 
 // Bootstrap tooltips
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));

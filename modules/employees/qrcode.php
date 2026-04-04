@@ -27,7 +27,7 @@ $qrData = $emp['employee_code'];
 $company = $_SESSION['company'] ?? [];
 $initials = strtoupper(substr($emp['first_name'], 0, 1) . substr($emp['last_name'], 0, 1));
 
-// Predefined colour palettes for the card header
+// Predefined color palettes for the card header
 $palettes = [
     'indigo'  => ['from' => '#6366f1', 'to' => '#8b5cf6'],
     'teal'    => ['from' => '#0d9488', 'to' => '#06b6d4'],
@@ -122,12 +122,12 @@ $gradient = "linear-gradient(135deg, {$p['from']}, {$p['to']})";
             <div class="card-body">
                 <!-- Colour picker -->
                 <div class="mb-4">
-                    <label class="form-label fw-bold">Card Colour</label>
+                    <label class="form-label fw-bold">Card Color</label>
                     <div class="d-flex flex-wrap gap-2">
                         <?php foreach($palettes as $key => $pal): ?>
-                        <a href="?id=<?= $id ?>&color=<?= $key ?>"
+                        <a href="?id=<?= (int)$id ?>&color=<?= htmlspecialchars($key) ?>"
                            class="color-swatch <?= $selectedPalette === $key ? 'selected' : '' ?>"
-                           title="<?= ucfirst($key) ?>"
+                           title="<?= htmlspecialchars(ucfirst($key)) ?>"
                            style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,<?= $pal['from'] ?>,<?= $pal['to'] ?>);display:inline-block;border:3px solid <?= $selectedPalette === $key ? '#fff' : 'transparent' ?>;box-shadow:<?= $selectedPalette === $key ? '0 0 0 2px ' . $pal['from'] : 'none' ?>;">
                         </a>
                         <?php endforeach; ?>

@@ -328,11 +328,14 @@ require_once __DIR__."/../../includes/nav.php";
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     <span><i class="bi bi-folder2 text-primary me-2"></i><?= htmlspecialchars($d["name"]) ?></span>
                                     <div class="d-flex gap-1">
-                                        <button class="btn btn-sm btn-outline-info" onclick="editDept(<?= $d['id'] ?>, '<?= e(addslashes($d['name'])) ?>')" title="Edit"><i class="bi bi-pencil"></i></button>
+                                        <button class="btn btn-sm btn-outline-info btn-edit-dept"
+                                                data-id="<?= (int)$d['id'] ?>"
+                                                data-name="<?= htmlspecialchars($d['name'], ENT_QUOTES) ?>"
+                                                title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="POST" class="d-inline" onsubmit="return confirm('Delete department?')">
                                             <?= csrf_input() ?>
                                             <input type="hidden" name="action" value="delete_department">
-                                            <input type="hidden" name="id" value="<?= $d["id"] ?>">
+                                            <input type="hidden" name="id" value="<?= (int)$d["id"] ?>">
                                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </div>
@@ -361,11 +364,14 @@ require_once __DIR__."/../../includes/nav.php";
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     <span><i class="bi bi-briefcase text-success me-2"></i><?= htmlspecialchars($p["name"]) ?></span>
                                     <div class="d-flex gap-1">
-                                        <button class="btn btn-sm btn-outline-info" onclick="editPos(<?= $p['id'] ?>, '<?= e(addslashes($p['name'])) ?>')" title="Edit"><i class="bi bi-pencil"></i></button>
+                                        <button class="btn btn-sm btn-outline-info btn-edit-pos"
+                                                data-id="<?= (int)$p['id'] ?>"
+                                                data-name="<?= htmlspecialchars($p['name'], ENT_QUOTES) ?>"
+                                                title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="POST" class="d-inline" onsubmit="return confirm('Delete position?')">
                                             <?= csrf_input() ?>
                                             <input type="hidden" name="action" value="delete_position">
-                                            <input type="hidden" name="id" value="<?= $p["id"] ?>">
+                                            <input type="hidden" name="id" value="<?= (int)$p["id"] ?>">
                                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </div>
@@ -415,7 +421,11 @@ require_once __DIR__."/../../includes/nav.php";
                                     <?php endif; ?>
                                 </td>
                                 <td class="action-btns text-center">
-                                    <button class="btn btn-sm btn-outline-info" onclick="editLt(<?= $lt['id'] ?>, '<?= e(addslashes($lt['name'])) ?>', <?= (int)$lt['days_allowed'] ?>, <?= (int)$lt['is_paid'] ?>)"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-info btn-edit-lt"
+                                            data-id="<?= (int)$lt['id'] ?>"
+                                            data-name="<?= htmlspecialchars($lt['name'], ENT_QUOTES) ?>"
+                                            data-days="<?= (int)$lt['days_allowed'] ?>"
+                                            data-paid="<?= (int)$lt['is_paid'] ?>"><i class="bi bi-pencil"></i></button>
                                     <form method="POST" class="d-inline" onsubmit="return confirm('Delete this leave type?')">
                                         <?= csrf_input() ?>
                                         <input type="hidden" name="action" value="delete_leave_type">
@@ -691,14 +701,16 @@ function switchTab(name) {
     history.replaceState(null, '', '?tab=' + name);
 }
 
-// Department edit
-function editDept(id, name) {
+// Department edit — use data attributes (XSS-safe)
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-edit-dept');
+    if (!btn) return;
     document.getElementById('deptAction').value = 'edit_department';
-    document.getElementById('deptId').value = id;
-    document.getElementById('deptName').value = name;
+    document.getElementById('deptId').value = btn.dataset.id;
+    document.getElementById('deptName').value = btn.dataset.name;
     document.getElementById('deptModalTitle').textContent = 'Edit Department';
     new bootstrap.Modal(document.getElementById('addDeptModal')).show();
-}
+});
 document.getElementById('addDeptModal')?.addEventListener('hidden.bs.modal', function() {
     document.getElementById('deptAction').value = 'add_department';
     document.getElementById('deptId').value = '';
@@ -706,14 +718,16 @@ document.getElementById('addDeptModal')?.addEventListener('hidden.bs.modal', fun
     document.getElementById('deptModalTitle').textContent = 'Add Department';
 });
 
-// Position edit
-function editPos(id, name) {
+// Position edit — use data attributes (XSS-safe)
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-edit-pos');
+    if (!btn) return;
     document.getElementById('posAction').value = 'edit_position';
-    document.getElementById('posId').value = id;
-    document.getElementById('posName').value = name;
+    document.getElementById('posId').value = btn.dataset.id;
+    document.getElementById('posName').value = btn.dataset.name;
     document.getElementById('posModalTitle').textContent = 'Edit Position';
     new bootstrap.Modal(document.getElementById('addPosModal')).show();
-}
+});
 document.getElementById('addPosModal')?.addEventListener('hidden.bs.modal', function() {
     document.getElementById('posAction').value = 'add_position';
     document.getElementById('posId').value = '';
@@ -721,16 +735,18 @@ document.getElementById('addPosModal')?.addEventListener('hidden.bs.modal', func
     document.getElementById('posModalTitle').textContent = 'Add Position';
 });
 
-// Leave type edit
-function editLt(id, name, days, paid) {
+// Leave type edit — use data attributes (XSS-safe)
+document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-edit-lt');
+    if (!btn) return;
     document.getElementById('ltAction').value = 'edit_leave_type';
-    document.getElementById('ltId').value = id;
-    document.getElementById('ltName').value = name;
-    document.getElementById('ltDays').value = days;
-    document.getElementById('ltPaid').checked = paid === 1;
+    document.getElementById('ltId').value = btn.dataset.id;
+    document.getElementById('ltName').value = btn.dataset.name;
+    document.getElementById('ltDays').value = btn.dataset.days;
+    document.getElementById('ltPaid').checked = btn.dataset.paid === '1';
     document.getElementById('ltModalTitle').textContent = 'Edit Leave Type';
     new bootstrap.Modal(document.getElementById('addLtModal')).show();
-}
+});
 document.getElementById('addLtModal')?.addEventListener('hidden.bs.modal', function() {
     document.getElementById('ltAction').value = 'add_leave_type';
     document.getElementById('ltId').value = '';
