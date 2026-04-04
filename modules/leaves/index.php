@@ -156,7 +156,7 @@ if($canApprove) {
                     <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-25"></i>No leave requests found
                 </td></tr>
             <?php else: foreach($rows as $r): 
-                $days = (int)ceil((strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400) + 1;
+                $days = (int)round((strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400) + 1;
             ?>
                 <tr data-status="<?= e($r['status']) ?>"
                     data-search="<?= strtolower(e($r['first_name'].' '.$r['last_name'].' '.$r['leave_type'])) ?>">

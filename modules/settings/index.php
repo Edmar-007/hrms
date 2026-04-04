@@ -225,26 +225,26 @@ require_once __DIR__."/../../includes/nav.php";
             <div class="card border-0 shadow-sm">
                 <div class="card-body p-2">
                     <nav class="settings-tabs nav flex-column" id="settingsTabs">
-                        <button class="nav-link <?= $activeTab==='company'?'active':'' ?>" onclick="switchTab('company')">
+                        <button class="nav-link <?= $activeTab==='company'?'active':'' ?>" data-tab="company" onclick="switchTab('company')">
                             <i class="bi bi-building"></i> Company Info
                         </button>
-                        <button class="nav-link <?= $activeTab==='org'?'active':'' ?>" onclick="switchTab('org')">
+                        <button class="nav-link <?= $activeTab==='org'?'active':'' ?>" data-tab="org" onclick="switchTab('org')">
                             <i class="bi bi-diagram-3"></i> Organization
                         </button>
-                        <button class="nav-link <?= $activeTab==='leaves'?'active':'' ?>" onclick="switchTab('leaves')">
+                        <button class="nav-link <?= $activeTab==='leaves'?'active':'' ?>" data-tab="leaves" onclick="switchTab('leaves')">
                             <i class="bi bi-calendar-week"></i> Leave Types
                         </button>
-                        <button class="nav-link <?= $activeTab==='schedule'?'active':'' ?>" onclick="switchTab('schedule')">
+                        <button class="nav-link <?= $activeTab==='schedule'?'active':'' ?>" data-tab="schedule" onclick="switchTab('schedule')">
                             <i class="bi bi-clock-history"></i> Work Schedule
                         </button>
-                        <button class="nav-link <?= $activeTab==='appearance'?'active':'' ?>" onclick="switchTab('appearance')">
+                        <button class="nav-link <?= $activeTab==='appearance'?'active':'' ?>" data-tab="appearance" onclick="switchTab('appearance')">
                             <i class="bi bi-palette"></i> Appearance
                         </button>
-                        <button class="nav-link <?= $activeTab==='security'?'active':'' ?>" onclick="switchTab('security')">
+                        <button class="nav-link <?= $activeTab==='security'?'active':'' ?>" data-tab="security" onclick="switchTab('security')">
                             <i class="bi bi-shield-lock"></i> Security
                         </button>
                         <hr class="my-2">
-                        <button class="nav-link <?= $activeTab==='subscription'?'active':'' ?>" onclick="switchTab('subscription')">
+                        <button class="nav-link <?= $activeTab==='subscription'?'active':'' ?>" data-tab="subscription" onclick="switchTab('subscription')">
                             <i class="bi bi-award"></i> Subscription
                         </button>
                         <a class="nav-link" href="holidays.php">
@@ -690,13 +690,13 @@ require_once __DIR__."/../../includes/nav.php";
 </div>
 
 <script>
-// Tab switching
+// Tab switching — uses data-tab attribute for reliable matching
 function switchTab(name) {
     document.querySelectorAll('.settings-section').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('#settingsTabs .nav-link').forEach(el => el.classList.remove('active'));
     document.getElementById('tab-' + name)?.classList.add('active');
-    document.querySelectorAll('#settingsTabs .nav-link').forEach(el => {
-        if(el.getAttribute('onclick') === "switchTab('" + name + "')") el.classList.add('active');
+    document.querySelectorAll('#settingsTabs .nav-link[data-tab]').forEach(el => {
+        if (el.dataset.tab === name) el.classList.add('active');
     });
     history.replaceState(null, '', '?tab=' + name);
 }
