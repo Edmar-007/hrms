@@ -7,7 +7,9 @@ $root = dirname(__DIR__);
 $dirs = [
     $base . '/settings',
     $root . '/api',
-    $root . '/database'
+    $root . '/database',
+    $root . '/public/uploads',
+    $root . '/public/uploads/logos'
 ];
 
 echo "<h3>HRMS Setup</h3>";

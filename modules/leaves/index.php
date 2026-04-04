@@ -87,31 +87,50 @@ if($canApprove) {
             ORDER BY lr.status='pending' DESC, lr.created_at DESC")->fetchAll();
     }
 } else {
-    $st = $pdo->prepare("SELECT lr.*, lt.name as leave_type, e.first_name, e.last_name 
-        FROM leave_requests lr 
-        JOIN leave_types lt ON lt.id=lr.leave_type_id 
-        JOIN employees e ON e.id=lr.employee_id 
-        WHERE lr.employee_id=? 
-        ORDER BY lr.created_at DESC");
-    $st->execute([$u['employee_id']]);
-    $rows = $st->fetchAll();
+    $empId = $u['employee_id'] ?? null;
+    if($empId) {
+        $st = $pdo->prepare("SELECT lr.*, lt.name as leave_type, e.first_name, e.last_name 
+            FROM leave_requests lr 
+            JOIN leave_types lt ON lt.id=lr.leave_type_id 
+            JOIN employees e ON e.id=lr.employee_id 
+            WHERE lr.employee_id=? 
+            ORDER BY lr.created_at DESC");
+        $st->execute([$empId]);
+        $rows = $st->fetchAll();
+    } else {
+        $rows = [];
+    }
 }
+$userHasEmployeeId = !empty($u['employee_id']);
 ?>
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-calendar-check me-2"></i>Leave Requests</h4>
+    <?php if($userHasEmployeeId): ?>
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
         <i class="bi bi-plus-lg me-2"></i>Request Leave
     </button>
+    <?php else: ?>
+    <button class="btn btn-secondary" disabled title="Your account is not linked to an employee profile">
+        <i class="bi bi-plus-lg me-2"></i>Request Leave
+    </button>
+    <?php endif; ?>
 </div>
 
+<?php if(!$userHasEmployeeId && !$canApprove): ?>
+<div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-2"></i>
+    Your user account is not linked to an employee profile. Please contact HR to link your account.
+</div>
+<?php endif; ?>
+
 <?php if(isset($_GET['msg']) || $actionFailed): ?>
-<div class="alert <?= $actionFailed ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
-    <i class="bi bi-check-circle me-2"></i>
+<div class="alert <?= $actionFailed || $_GET['msg'] === 'error' ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
+    <i class="bi bi-<?= $actionFailed || $_GET['msg'] === 'error' ? 'exclamation-circle' : 'check-circle' ?> me-2"></i>
     <?php 
-    if($actionFailed) {
-        echo 'Unable to process leave action.';
+    if($actionFailed || ($_GET['msg'] ?? '') === 'error') {
+        echo 'Unable to process leave request. Please ensure all fields are filled correctly.';
     } else {
-        $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!'];
+        $msgs = ['added'=>'Leave request submitted successfully!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!'];
         echo $msgs[$_GET['msg']] ?? 'Done!';
     }
     ?>
@@ -120,66 +139,193 @@ if($canApprove) {
 <?php endif; ?>
 
 <div class="card">
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
+    <!-- Toolbar -->
+    <div class="table-toolbar">
+        <div class="input-group" style="max-width:300px;">
+            <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search text-muted"></i></span>
+            <input type="text" id="leaveSearch" class="form-control border-start-0 ps-0" placeholder="Search employee or type…">
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <select id="leaveStatusFilter" class="form-select form-select-sm" style="width:auto;">
+                <option value="">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+            </select>
+            <span class="badge bg-primary table-count-badge" id="leaveCount"><?= count($rows) ?> total</span>
+        </div>
+    </div>
+
+    <div class="table-responsive-wrapper">
+        <table class="table table-hover mb-0" id="leaveTable">
             <thead>
                 <tr>
                     <th>Employee</th>
-                    <th>Type</th>
-                    <th>From</th>
-                    <th>To</th>
+                    <th>Leave Type</th>
+                    <th>Period</th>
                     <th>Days</th>
+                    <th>Reason</th>
                     <th>Status</th>
-                    <?php if($canApprove): ?><th>Actions</th><?php endif; ?>
+                    <th class="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody>
             <?php if(empty($rows)): ?>
-                <tr><td colspan="7" class="text-center py-4 text-muted">No leave requests found</td></tr>
+                <tr><td colspan="7" class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-25"></i>No leave requests found
+                </td></tr>
             <?php else: foreach($rows as $r): 
-                $days = (strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400 + 1;
+                $days = (int)round((strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400) + 1;
             ?>
-                <tr>
-                    <td><i class="bi bi-person-circle me-2 text-muted"></i><?= e($r['first_name'].' '.$r['last_name']) ?></td>
+                <tr data-status="<?= e($r['status']) ?>"
+                    data-search="<?= strtolower(e($r['first_name'].' '.$r['last_name'].' '.$r['leave_type'])) ?>">
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="avatar-sm" style="background:linear-gradient(135deg,#0d9488,#06b6d4);">
+                                <?= strtoupper(substr($r['first_name'],0,1).substr($r['last_name'],0,1)) ?>
+                            </div>
+                            <div class="fw-semibold"><?= e($r['first_name'].' '.$r['last_name']) ?></div>
+                        </div>
+                    </td>
                     <td><span class="badge bg-info"><?= e($r['leave_type']) ?></span></td>
-                    <td><?= date('M j, Y', strtotime($r['start_date'])) ?></td>
-                    <td><?= date('M j, Y', strtotime($r['end_date'])) ?></td>
-                    <td><?= $days ?></td>
+                    <td>
+                        <div class="fw-semibold"><?= date('M j', strtotime($r['start_date'])) ?> – <?= date('M j, Y', strtotime($r['end_date'])) ?></div>
+                        <small class="text-muted">Filed: <?= date('M j, Y', strtotime($r['created_at'])) ?></small>
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary"><?= $days ?> day<?= $days != 1 ? 's' : '' ?></span>
+                    </td>
+                    <td>
+                        <?php if(!empty($r['reason'])): ?>
+                            <span class="d-inline-block text-truncate" style="max-width:160px;" title="<?= e($r['reason']) ?>"><?= e($r['reason']) ?></span>
+                        <?php else: ?>
+                            <span class="text-muted">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <?php if($r['status'] === 'pending'): ?>
-                            <span class="badge bg-warning"><i class="bi bi-hourglass-split me-1"></i>Pending</span>
+                            <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Pending</span>
                         <?php elseif($r['status'] === 'approved'): ?>
                             <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Approved</span>
                         <?php else: ?>
                             <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Rejected</span>
                         <?php endif; ?>
                     </td>
-                    <?php if($canApprove): ?>
-                    <td class="action-btns">
-                        <?php if($r['status'] === 'pending'): ?>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Approve this leave?')">
-                            <?= csrf_input() ?>
-                            <input type="hidden" name="action" value="approved">
-                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                            <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
-                        </form>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Reject this leave?')">
-                            <?= csrf_input() ?>
-                            <input type="hidden" name="action" value="rejected">
-                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                            <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i></button>
-                        </form>
-                        <?php else: ?>
-                        <span class="text-muted small">-</span>
+                    <td class="action-btns text-center">
+                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                data-bs-toggle="modal" data-bs-target="#viewLeaveModal<?= (int)$r['id'] ?>" 
+                                title="View Details">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        <?php if($canApprove): ?>
+                            <?php if($r['status'] === 'pending'): ?>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Approve this leave request?')">
+                                <?= csrf_input() ?>
+                                <input type="hidden" name="action" value="approved">
+                                <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-success" title="Approve">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                            </form>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Reject this leave request?')">
+                                <?= csrf_input() ?>
+                                <input type="hidden" name="action" value="rejected">
+                                <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-danger" title="Reject">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </form>
+                            <?php elseif($r['status'] === 'approved'): ?>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Revoke this approved leave?')">
+                                <?= csrf_input() ?>
+                                <input type="hidden" name="action" value="rejected">
+                                <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Revoke">
+                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                </button>
+                            </form>
+                            <?php else: ?>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Re-approve this leave request?')">
+                                <?= csrf_input() ?>
+                                <input type="hidden" name="action" value="approved">
+                                <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-success" title="Re-approve">
+                                    <i class="bi bi-check-circle"></i>
+                                </button>
+                            </form>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </td>
-                    <?php endif; ?>
                 </tr>
             <?php endforeach; endif; ?>
             </tbody>
         </table>
     </div>
 </div>
+
+<!-- View Leave Modals -->
+<?php if(!empty($rows)): foreach($rows as $r): 
+    $days = (int)round((strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400) + 1;
+?>
+<div class="modal fade" id="viewLeaveModal<?= (int)$r['id'] ?>" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-calendar-event me-2"></i>Leave Request Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex align-items-center gap-3 mb-4 pb-3 border-bottom">
+                    <div class="avatar-sm" style="width:50px;height:50px;font-size:1.1rem;background:linear-gradient(135deg,#0d9488,#06b6d4);">
+                        <?= strtoupper(substr($r['first_name'],0,1).substr($r['last_name'],0,1)) ?>
+                    </div>
+                    <div>
+                        <h5 class="mb-0"><?= e($r['first_name'].' '.$r['last_name']) ?></h5>
+                        <span class="badge bg-info"><?= e($r['leave_type']) ?></span>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="form-label text-muted small mb-1">Start Date</label>
+                        <div class="fw-semibold"><?= date('F j, Y', strtotime($r['start_date'])) ?></div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-muted small mb-1">End Date</label>
+                        <div class="fw-semibold"><?= date('F j, Y', strtotime($r['end_date'])) ?></div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-muted small mb-1">Total Days</label>
+                        <div class="fw-semibold"><?= $days ?> day<?= $days != 1 ? 's' : '' ?></div>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label text-muted small mb-1">Status</label>
+                        <div>
+                            <?php if($r['status'] === 'pending'): ?>
+                                <span class="badge bg-warning text-dark">Pending</span>
+                            <?php elseif($r['status'] === 'approved'): ?>
+                                <span class="badge bg-success">Approved</span>
+                            <?php else: ?>
+                                <span class="badge bg-danger">Rejected</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label text-muted small mb-1">Reason</label>
+                        <div class="p-3 bg-light rounded"><?= !empty($r['reason']) ? e($r['reason']) : '<em class="text-muted">No reason provided</em>' ?></div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label text-muted small mb-1">Filed On</label>
+                        <div><?= date('F j, Y \a\t h:i A', strtotime($r['created_at'])) ?></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endforeach; endif; ?>
 
 <!-- Request Leave Modal -->
 <div class="modal fade" id="addModal" tabindex="-1">
@@ -195,7 +341,7 @@ if($canApprove) {
                     <div class="mb-3">
                         <label class="form-label">Leave Type</label>
                         <select class="form-select" name="leave_type_id" required>
-                            <option value="">-- Select --</option>
+                            <option value="">— Select Leave Type —</option>
                             <?php foreach($leaveTypes as $lt): ?>
                             <option value="<?= $lt['id'] ?>"><?= e($lt['name']) ?> (<?= $lt['days_allowed'] ?> days/year)</option>
                             <?php endforeach; ?>
@@ -212,8 +358,8 @@ if($canApprove) {
                         </div>
                     </div>
                     <div class="mt-3">
-                        <label class="form-label">Reason</label>
-                        <textarea class="form-control" name="reason" rows="3" placeholder="Optional reason..."></textarea>
+                        <label class="form-label">Reason <span class="text-muted fw-normal">(optional)</span></label>
+                        <textarea class="form-control" name="reason" rows="3" placeholder="Brief reason for your leave…"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -224,5 +370,29 @@ if($canApprove) {
         </div>
     </div>
 </div>
+
+<script>
+const leaveSearch = document.getElementById('leaveSearch');
+const leaveFilter = document.getElementById('leaveStatusFilter');
+const leaveCount  = document.getElementById('leaveCount');
+
+function filterLeave() {
+    const q = leaveSearch.value.toLowerCase();
+    const s = leaveFilter.value;
+    let v = 0;
+    document.querySelectorAll('#leaveTable tbody tr[data-status]').forEach(row => {
+        const ms = !q || row.dataset.search.includes(q);
+        const mf = !s || row.dataset.status === s;
+        row.style.display = (ms && mf) ? '' : 'none';
+        if (ms && mf) v++;
+    });
+    leaveCount.textContent = v + ' total';
+}
+if (leaveSearch) leaveSearch.addEventListener('input',  filterLeave);
+if (leaveFilter) leaveFilter.addEventListener('change', filterLeave);
+
+// Bootstrap tooltips
+document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+</script>
 
 <?php require_once __DIR__.'/../../includes/footer.php'; ?>

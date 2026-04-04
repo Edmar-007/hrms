@@ -14,13 +14,37 @@ if(empty($code)) {
     exit;
 }
 
-// Find employee by employee_code (QR code contains employee_code)
-$st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE employee_code = ? AND status = 'active'");
-$st->execute([$code]);
-$employee = $st->fetch();
+// Try to parse as JSON first (new format)
+$qrParsed = @json_decode($code, true);
+$employeeCode = null;
+$employeeId = null;
+
+if($qrParsed && isset($qrParsed['type']) && $qrParsed['type'] === 'hrms_employee') {
+    // New JSON format - use employee ID directly
+    $employeeId = intval($qrParsed['id'] ?? 0);
+    $employeeCode = $qrParsed['code'] ?? null;
+} else {
+    // Legacy format - code is just the employee_code string
+    $employeeCode = $code;
+}
+
+// Find employee
+$employee = null;
+if($employeeId) {
+    $st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE id = ? AND status = 'active'");
+    $st->execute([$employeeId]);
+    $employee = $st->fetch();
+}
+
+if(!$employee && $employeeCode) {
+    // Fallback to employee_code search
+    $st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE employee_code = ? AND status = 'active'");
+    $st->execute([$employeeCode]);
+    $employee = $st->fetch();
+}
 
 if(!$employee) {
-    echo json_encode(['success' => false, 'message' => 'Employee not found: ' . $code]);
+    echo json_encode(['success' => false, 'message' => 'Employee not found or inactive']);
     exit;
 }
 
@@ -81,6 +105,7 @@ if(!$attendance) {
         'success' => true,
         'action' => 'Time In',
         'employee' => $employeeName,
+        'employee_code' => $employee['employee_code'],
         'time' => date('h:i A'),
         'message' => $employeeName . ' - Time In recorded',
         'shift_warning' => $shiftWarning
@@ -94,6 +119,7 @@ if(!$attendance) {
         'success' => true,
         'action' => 'Time Out',
         'employee' => $employeeName,
+        'employee_code' => $employee['employee_code'],
         'time' => date('h:i A'),
         'message' => $employeeName . ' - Time Out recorded',
         'shift_warning' => $shiftWarning

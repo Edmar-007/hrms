@@ -4,6 +4,9 @@ $company=$_SESSION['company']??null;
 $currentPage = basename($_SERVER['PHP_SELF']); 
 $currentDir = basename(dirname($_SERVER['PHP_SELF']));
 $features = json_decode($company['features'] ?? '{}', true);
+$navSettings = json_decode($company['nav_settings'] ?? '{}', true);
+$sidebarColor = $navSettings['sidebar_color'] ?? 'default';
+$companyLogo = $company['logo_url'] ?? '';
 ?>
 <?php if($u): ?>
 <!-- Mobile Header -->
@@ -11,7 +14,12 @@ $features = json_decode($company['features'] ?? '{}', true);
     <button class="btn btn-link text-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">
         <i class="bi bi-list fs-4"></i>
     </button>
-    <span class="brand"><?= e($company['name'] ?? APP_NAME) ?></span>
+    <span class="brand">
+        <?php if($companyLogo): ?>
+            <img src="<?= e($companyLogo) ?>" alt="<?= e($company['name'] ?? APP_NAME) ?>" style="height:28px;" class="me-2">
+        <?php endif; ?>
+        <?= e($company['name'] ?? APP_NAME) ?>
+    </span>
     <div class="ms-auto d-flex align-items-center gap-2">
         <button class="btn btn-link text-white p-0" onclick="toggleTheme()">
             <i class="bi bi-<?= ($u['theme']??'light')==='dark'?'sun':'moon' ?>"></i>
@@ -20,9 +28,13 @@ $features = json_decode($company['features'] ?? '{}', true);
 </div>
 
 <!-- Sidebar -->
-<aside class="sidebar d-lg-block offcanvas-lg offcanvas-start" id="sidebar">
+<aside class="sidebar d-lg-block offcanvas-lg offcanvas-start <?= $sidebarColor !== 'default' ? 'sidebar-'.$sidebarColor : '' ?>" id="sidebar">
     <div class="sidebar-header">
-        <i class="bi bi-building-check"></i>
+        <?php if($companyLogo): ?>
+            <img src="<?= e($companyLogo) ?>" alt="Logo" style="height:36px;border-radius:8px;" class="sidebar-logo">
+        <?php else: ?>
+            <i class="bi bi-building-check"></i>
+        <?php endif; ?>
         <span><?= e($company['name'] ?? 'HRMS') ?></span>
     </div>
     
