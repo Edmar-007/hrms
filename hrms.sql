@@ -10,6 +10,7 @@ CREATE TABLE companies (
     phone VARCHAR(50),
     address TEXT,
     logo_url VARCHAR(500),
+    nav_settings JSON,
     timezone VARCHAR(50) DEFAULT 'Asia/Manila',
     currency VARCHAR(10) DEFAULT 'PHP',
     plan ENUM('free','starter','professional','enterprise') DEFAULT 'free',

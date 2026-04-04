@@ -18,6 +18,7 @@ if(empty($code)) {
     exit;
 }
 
+<<<<<<< HEAD
 $ip = client_ip();
 if (!rate_limit_check('scan:'.$ip, 120, 60)) {
     echo json_encode(['success' => false, 'message' => 'Too many scan requests. Please wait a moment.']);
@@ -39,9 +40,39 @@ $graceAfter = max(0, (int)($settings['out_of_shift_grace_after_minutes'] ?? 60))
 $st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE company_id = ? AND employee_code = ? AND status = 'active'");
 $st->execute([$cid, $code]);
 $employee = $st->fetch();
+=======
+// Try to parse as JSON first (new format)
+$qrParsed = @json_decode($code, true);
+$employeeCode = null;
+$employeeId = null;
+
+if($qrParsed && isset($qrParsed['type']) && $qrParsed['type'] === 'hrms_employee') {
+    // New JSON format - use employee ID directly
+    $employeeId = intval($qrParsed['id'] ?? 0);
+    $employeeCode = $qrParsed['code'] ?? null;
+} else {
+    // Legacy format - code is just the employee_code string
+    $employeeCode = $code;
+}
+
+// Find employee
+$employee = null;
+if($employeeId) {
+    $st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE id = ? AND status = 'active'");
+    $st->execute([$employeeId]);
+    $employee = $st->fetch();
+}
+
+if(!$employee && $employeeCode) {
+    // Fallback to employee_code search
+    $st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE employee_code = ? AND status = 'active'");
+    $st->execute([$employeeCode]);
+    $employee = $st->fetch();
+}
+>>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
 
 if(!$employee) {
-    echo json_encode(['success' => false, 'message' => 'Employee not found: ' . $code]);
+    echo json_encode(['success' => false, 'message' => 'Employee not found or inactive']);
     exit;
 }
 
@@ -91,6 +122,7 @@ $st = $pdo->prepare("SELECT * FROM attendance WHERE company_id = ? AND employee_
 $st->execute([$cid, $employeeId, $date]);
 $attendance = $st->fetch();
 
+<<<<<<< HEAD
 $requestedAction = strtolower($requestedAction);
 $allowedActions = ['auto', 'time_in', 'break_in', 'break_out', 'time_out'];
 if (!in_array($requestedAction, $allowedActions, true)) $requestedAction = 'auto';
@@ -99,6 +131,50 @@ $lastScanAt = $attendance['last_scan_at'] ?? null;
 if ($lastScanAt && ($nowTs - strtotime($lastScanAt)) < $duplicateWindow) {
     echo json_encode(['success' => false, 'message' => 'Duplicate scan detected. Please wait '.($duplicateWindow).' seconds.']);
     exit;
+=======
+if(!$attendance) {
+    // Time In - Check if SaaS mode
+    $hasSaas = $pdo->query("SHOW COLUMNS FROM attendance LIKE 'company_id'")->fetch();
+    
+    if($hasSaas) {
+        $cid = company_id() ?? 1;
+        $st = $pdo->prepare("INSERT INTO attendance (company_id, employee_id, date, time_in) VALUES (?, ?, ?, ?)");
+        $st->execute([$cid, $employeeId, $date, $time]);
+    } else {
+        $st = $pdo->prepare("INSERT INTO attendance (employee_id, date, time_in) VALUES (?, ?, ?)");
+        $st->execute([$employeeId, $date, $time]);
+    }
+    
+    echo json_encode([
+        'success' => true,
+        'action' => 'Time In',
+        'employee' => $employeeName,
+        'employee_code' => $employee['employee_code'],
+        'time' => date('h:i A'),
+        'message' => $employeeName . ' - Time In recorded',
+        'shift_warning' => $shiftWarning
+    ]);
+} elseif(!$attendance['time_out']) {
+    // Time Out
+    $st = $pdo->prepare("UPDATE attendance SET time_out = ? WHERE id = ?");
+    $st->execute([$time, $attendance['id']]);
+    
+    echo json_encode([
+        'success' => true,
+        'action' => 'Time Out',
+        'employee' => $employeeName,
+        'employee_code' => $employee['employee_code'],
+        'time' => date('h:i A'),
+        'message' => $employeeName . ' - Time Out recorded',
+        'shift_warning' => $shiftWarning
+    ]);
+} else {
+    // Already completed
+    echo json_encode([
+        'success' => false,
+        'message' => $employeeName . ' already completed attendance today'
+    ]);
+>>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
 }
 
 $nextAction = 'time_in';
