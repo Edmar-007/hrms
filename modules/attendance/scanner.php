@@ -173,7 +173,8 @@ async function refreshLiveFeed() {
         data.rows.slice().reverse().forEach(r => {
             if (r.id > lastFeedId) lastFeedId = r.id;
             const initials = ((r.first_name?.[0] || '') + (r.last_name?.[0] || '')).toUpperCase();
-            const action = r.last_action ? r.last_action.replace('_',' ') : (r.time_out ? 'time out' : 'time in');
+            const actionMap = { time_in: 'time in', break_in: 'break in', break_out: 'break out', time_out: 'time out' };
+            const action = actionMap[r.last_action] || 'unknown';
             const t = r.last_scan_at || (r.time_out ? r.time_out : r.time_in);
             const item = document.createElement('div');
             item.className = 'list-group-item d-flex align-items-center';

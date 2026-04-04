@@ -35,7 +35,7 @@ if (is_post()) {
                     $line = 1;
                     while (($row = fgetcsv($handle)) !== false) {
                         $line++;
-                        if (count($row) < count($expected)) { $failed++; $errors[] = "Line $line: Invalid column count"; continue; }
+                        if (count($row) !== count($expected)) { $failed++; $errors[] = "Line $line: Expected ".count($expected)." columns, got ".count($row); continue; }
                         $data = array_combine($expected, $row);
                         $data = array_map('trim', $data);
                         if (!v_required($data['employee_code']) || !v_required($data['first_name']) || !v_required($data['last_name']) || !v_email($data['email']) || !v_phone($data['phone']) || !v_non_negative_number($data['basic_salary'])) {
@@ -47,7 +47,8 @@ if (is_post()) {
                             $inserted++;
                         } catch (Exception $e) {
                             $failed++;
-                            $errors[] = "Line $line: " . $e->getMessage();
+                            error_log("Employee CSV import error on line $line: ".$e->getMessage());
+                            $errors[] = "Line $line: Database error occurred";
                         }
                     }
                     $summary = ['inserted' => $inserted, 'failed' => $failed];
@@ -84,4 +85,3 @@ if (is_post()) {
 </div>
 
 <?php require_once __DIR__.'/../../includes/footer.php'; ?>
-

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__."/../config/db.php";
 require_once __DIR__."/../includes/auth.php";
+require_once __DIR__."/../includes/csrf.php";
 
 header("Content-Type: application/json");
 
@@ -14,6 +15,12 @@ $userId = $_SESSION["user"]["id"];
 $companyId = company_id();
 
 if(isset($_GET["action"]) && $_GET["action"] === "read_all" && $_SERVER["REQUEST_METHOD"] === "POST") {
+    $body = json_decode(file_get_contents('php://input'), true);
+    if (!verify_csrf($body['csrf_token'] ?? null)) {
+        http_response_code(400);
+        echo json_encode(["error" => "Invalid CSRF"]);
+        exit;
+    }
     $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND company_id = ?")
         ->execute([$userId, $companyId]);
     echo json_encode(["success" => true]);

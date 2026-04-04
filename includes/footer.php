@@ -1,4 +1,4 @@
-<?php $u=$_SESSION['user']??null; ?>
+<?php require_once __DIR__.'/csrf.php'; $u=$_SESSION['user']??null; ?>
 <?php if($u): ?></main><?php endif; ?>
 </div>
 
@@ -10,6 +10,7 @@
 <script>
 const BASE_URL = '<?= BASE_URL ?>';
 const USER_ID = <?= $u['id'] ?? 'null' ?>;
+const CSRF_TOKEN = '<?= csrf_token() ?>';
 
 // Toast notification function
 function showToast(message, type = 'info', duration = 4000) {
@@ -53,7 +54,7 @@ function toggleTheme() {
     fetch(BASE_URL + '/api/preferences.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ theme: newTheme })
+        body: JSON.stringify({ theme: newTheme, csrf_token: CSRF_TOKEN })
     });
     
     showToast(newTheme === 'dark' ? 'Dark mode enabled' : 'Light mode enabled', 'info');
@@ -89,7 +90,11 @@ async function loadNotifications() {
 
 // Mark all notifications read
 function markAllRead() {
-    fetch(BASE_URL + '/api/notifications.php?action=read_all', { method: 'POST' })
+    fetch(BASE_URL + '/api/notifications.php?action=read_all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN })
+    })
         .then(() => {
             document.getElementById('notif-count').style.display = 'none';
             document.querySelectorAll('.notification-item').forEach(el => el.classList.remove('unread'));

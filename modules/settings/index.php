@@ -63,7 +63,8 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
 
     if($action === "update_attendance_policy") {
         $grace = max(0, (int)($_POST["grace_period_minutes"] ?? 10));
-        $dup = max(1, (int)($_POST["duplicate_scan_seconds"] ?? 3));
+        $dupInput = $_POST["duplicate_scan_seconds"] ?? 3;
+        $dup = max(1, (int)$dupInput);
         $seq = isset($_POST["require_action_sequence"]) ? 1 : 0;
         $gps = isset($_POST["gps_capture_enabled"]) ? 1 : 0;
         $before = max(0, (int)($_POST["out_of_shift_grace_before_minutes"] ?? 60));

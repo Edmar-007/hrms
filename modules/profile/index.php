@@ -27,8 +27,9 @@ if (is_post() && verify_csrf()) {
             $pdo->prepare("UPDATE employees SET phone = ? WHERE id = ? AND company_id = ?")->execute([$phone, $emp['id'], $cid]);
             log_activity('update', 'profile', $emp['id'], ['phone_updated' => true]);
             $msg = 'Profile updated.';
-            $st->execute([$u['employee_id'], $cid]);
-            $emp = $st->fetch();
+            $refetch = $pdo->prepare("SELECT * FROM employees WHERE id = ? AND company_id = ? LIMIT 1");
+            $refetch->execute([$u['employee_id'], $cid]);
+            $emp = $refetch->fetch();
         }
     }
     if ($action === 'change_password') {
@@ -81,4 +82,3 @@ if (is_post() && verify_csrf()) {
     </div>
 </div>
 <?php require_once __DIR__.'/../../includes/footer.php'; ?>
-

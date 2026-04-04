@@ -15,10 +15,14 @@ $hasSaas = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch
 $cid = $hasSaas ? (company_id() ?? 1) : null;
 
 // Handle approve/reject (POST + CSRF)
-if(is_post() && $canApprove && verify_csrf()) {
+if(is_post() && verify_csrf()) {
     $action = $_POST['action'] ?? '';
     $id = (int)($_POST['id'] ?? 0);
     if(in_array($action, ['approved', 'rejected', 'cancelled'])) {
+        if (!$canApprove) {
+            $permissionDenied = true;
+            $actionFailed = true;
+        } else {
         // Fetch current leave request before updating
         if($hasSaas && $cid) {
             $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ? AND lr.company_id = ?");
@@ -72,8 +76,10 @@ if(is_post() && $canApprove && verify_csrf()) {
         }
 
         header("Location: index.php?msg=$action"); exit;
+        }
+    } else {
+        $actionFailed = true;
     }
-    $actionFailed = true;
 }
 
 // Get leave types
@@ -127,7 +133,7 @@ if($canApprove) {
     <i class="bi bi-check-circle me-2"></i>
     <?php 
     if($actionFailed) {
-        echo 'Unable to process leave action.';
+        echo !empty($permissionDenied) ? 'You do not have permission to perform this action.' : 'Unable to process leave action.';
     } else {
         $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!', 'cancelled' => 'Leave cancelled!'];
         echo $msgs[$_GET['msg']] ?? 'Done!';

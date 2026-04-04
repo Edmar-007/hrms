@@ -6,7 +6,7 @@ $options=[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE
 try{
     $pdo=new PDO($dsn,$user,$pass,$options);
 }catch(PDOException $e){
-    error_log('Database connection failed: '.$e->getMessage());
+    error_log('Database connection failed.');
     http_response_code(500);
     exit('Database connection failed.');
 }

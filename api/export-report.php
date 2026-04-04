@@ -44,11 +44,16 @@ if ($type === 'attendance') {
 if ($format === 'print') {
     ?><!doctype html><html><head><meta charset="utf-8"><title>Printable <?= htmlspecialchars($type) ?> report</title>
     <style>body{font-family:Arial,sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:6px;font-size:12px}</style>
-    </head><body><h3><?= htmlspecialchars(ucfirst($type)) ?> Report (<?= htmlspecialchars($month) ?>)</h3><table><thead><tr><?php
-    if (!empty($rows)) foreach(array_keys($rows[0]) as $k) echo '<th>'.htmlspecialchars($k).'</th>';
-    echo '</tr></thead><tbody>';
+    </head><body><h3><?= htmlspecialchars(ucfirst($type)) ?> Report (<?= htmlspecialchars($month) ?>)</h3><?php if (empty($rows)): ?>
+    <p>No records found.</p>
+    <?php else: ?><table><thead><?php
+    echo '<tr>';
+    foreach(array_keys($rows[0]) as $k) echo '<th>'.htmlspecialchars($k).'</th>';
+    echo '</tr>';
+    echo '</thead><tbody>';
     foreach($rows as $r){ echo '<tr>'; foreach($r as $v) echo '<td>'.htmlspecialchars((string)$v).'</td>'; echo '</tr>'; }
-    echo '</tbody></table><script>window.print()</script></body></html><?php
+    echo '</tbody></table>';
+    endif; ?><script>window.print()</script></body></html><?php
     exit;
 }
 
@@ -61,4 +66,3 @@ if (!empty($rows)) {
 }
 fclose($out);
 exit;
-

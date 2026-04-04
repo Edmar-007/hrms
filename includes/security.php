@@ -17,7 +17,7 @@ function client_ip() {
 }
 
 function rate_limit_check($key, $maxAttempts, $windowSeconds) {
-    $safeKey = preg_replace('/[^a-zA-Z0-9_\-:.]/', '_', (string)$key);
+    $safeKey = preg_replace('/[^a-zA-Z0-9_.:-]/', '_', (string)$key);
     $dir = sys_get_temp_dir() . '/hrms_rate_limits';
     if (!is_dir($dir)) @mkdir($dir, 0777, true);
     $file = $dir . '/' . sha1($safeKey) . '.json';
@@ -69,4 +69,3 @@ function store_upload(array $file, $targetDir, $prefix, array $extByMime) {
     if (!move_uploaded_file($file['tmp_name'], $dest)) return null;
     return $name;
 }
-

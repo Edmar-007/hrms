@@ -48,6 +48,16 @@ $features = json_decode($company['features'] ?? '{}', true);
             <i class="bi bi-calendar-event"></i>
             <span>Leave Requests</span>
         </a>
+        <a href="<?= BASE_URL ?>/modules/profile/index.php" class="nav-item <?= $currentDir==='profile'?'active':'' ?>">
+            <i class="bi bi-person-circle"></i>
+            <span>My Profile</span>
+        </a>
+        <?php if(($features['payroll'] ?? true) && !in_array($u['role'], ['Admin','HR Officer'])): ?>
+        <a href="<?= BASE_URL ?>/modules/payroll/my-summary.php" class="nav-item <?= $currentPage==='my-summary.php'?'active':'' ?>">
+            <i class="bi bi-cash-coin"></i>
+            <span>My Payroll</span>
+        </a>
+        <?php endif; ?>
         
         <?php if(in_array($u['role'], ['Admin', 'HR Officer'])): ?>
         <div class="nav-section">MANAGEMENT</div>
@@ -69,6 +79,13 @@ $features = json_decode($company['features'] ?? '{}', true);
         <a href="<?= BASE_URL ?>/modules/reports/index.php" class="nav-item <?= $currentDir==='reports'?'active':'' ?>">
             <i class="bi bi-bar-chart-line-fill"></i>
             <span>Reports</span>
+        </a>
+        <?php endif; ?>
+
+        <?php if(in_array($u['role'], ['Admin','HR Officer'])): ?>
+        <a href="<?= BASE_URL ?>/modules/audit/logs.php" class="nav-item <?= $currentDir==='audit'?'active':'' ?>">
+            <i class="bi bi-journal-text"></i>
+            <span>Audit Logs</span>
         </a>
         <?php endif; ?>
         

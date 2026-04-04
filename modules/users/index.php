@@ -40,7 +40,7 @@ if (is_post()) {
                 } else {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
                     $pdo->prepare("INSERT INTO users (company_id, employee_id, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, 1)")
-                        ->execute([$cid, $employeeId ?: null, $email, $hash, $role]);
+                        ->execute([$cid, ($employeeId > 0 ? $employeeId : null), $email, $hash, $role]);
                     log_activity('create', 'user', (int)$pdo->lastInsertId(), ['email' => $email, 'role' => $role]);
                     $msg = 'User account created.';
                 }
@@ -56,9 +56,13 @@ if (is_post()) {
                 $st = $pdo->prepare("SELECT * FROM users WHERE id = ? AND company_id = ?");
                 $st->execute([$id, $cid]);
                 $target = $st->fetch();
+                $activeAdmins = company_active_admin_count($pdo, $cid);
+                $targetIsActiveAdmin = ($target && $target['role'] === 'Admin' && (int)$target['is_active'] === 1);
+                $willRemainActiveAdmin = ($role === 'Admin' && $isActive === 1);
+                $wouldRemoveLastActiveAdmin = $targetIsActiveAdmin && !$willRemainActiveAdmin && $activeAdmins <= 1;
                 if (!$target) $err = 'User not found.';
                 elseif ((int)$target['id'] === (int)$u['id'] && $isActive === 0) $err = 'You cannot deactivate your own account.';
-                elseif ($target['role'] === 'Admin' && $isActive === 0 && company_active_admin_count($pdo, $cid) <= 1) $err = 'At least one active admin is required.';
+                elseif ($wouldRemoveLastActiveAdmin) $err = 'At least one active admin is required.';
                 else {
                     if ($password !== '') {
                         if (strlen($password) < 8) {
@@ -87,7 +91,7 @@ if (is_post()) {
                 $st->execute([$id, $cid]);
                 $target = $st->fetch();
                 if (!$target) $err = 'User not found.';
-                elseif ($target['role'] === 'Admin' && company_active_admin_count($pdo, $cid) <= 1) $err = 'At least one admin account is required.';
+                elseif ($target['role'] === 'Admin' && (int)$target['is_active'] === 1 && company_active_admin_count($pdo, $cid) <= 1) $err = 'At least one admin account is required.';
                 else {
                     $pdo->prepare("DELETE FROM users WHERE id = ? AND company_id = ?")->execute([$id, $cid]);
                     log_activity('delete', 'user', $id, ['email' => $target['email']]);
@@ -210,4 +214,3 @@ $users = $users->fetchAll();
 </div>
 
 <?php require_once __DIR__.'/../../includes/footer.php'; ?>
-

@@ -9,9 +9,20 @@ require_role(['Admin', 'HR Officer', 'Manager']);
 // Check SaaS mode
 $hasSaas = $pdo->query("SHOW COLUMNS FROM employees LIKE 'company_id'")->fetch();
 $cid = $hasSaas ? (company_id() ?? 1) : null;
+$from = $_GET['from'] ?? date('Y-m-01');
+$to = $_GET['to'] ?? date('Y-m-d');
+$deptFilter = (int)($_GET['department_id'] ?? 0);
+$statusFilter = $_GET['status'] ?? '';
+$lateThreshold = '09:00:00';
 
 // Get stats with SaaS support
 if($hasSaas && $cid) {
+    $lateCfg = $pdo->prepare("SELECT grace_period_minutes FROM attendance_settings WHERE company_id=? LIMIT 1");
+    $lateCfg->execute([$cid]);
+    $lateRow = $lateCfg->fetch();
+    $graceMins = (int)($lateRow['grace_period_minutes'] ?? 10);
+    // Baseline shift start used for late summary when per-employee shift is unavailable.
+    $lateThreshold = date('H:i:s', strtotime('08:00:00 +' . $graceMins . ' minutes'));
     $st = $pdo->prepare("SELECT COUNT(*) c FROM employees WHERE company_id=? AND status='active'");
     $st->execute([$cid]); $totalEmployees = $st->fetch()['c'];
     
@@ -23,6 +34,28 @@ if($hasSaas && $cid) {
     
     $st = $pdo->prepare("SELECT COUNT(*) c FROM attendance WHERE company_id=? AND date=CURDATE()");
     $st->execute([$cid]); $todayAttendance = $st->fetch()['c'];
+
+    $baseFilter = " FROM employees e
+        LEFT JOIN attendance a ON a.employee_id=e.id AND a.company_id=? AND a.date BETWEEN ? AND ?
+        WHERE e.company_id=? AND e.status='active' ";
+    $params = [$cid, $from, $to, $cid];
+    if ($deptFilter > 0) { $baseFilter .= " AND e.department_id = ? "; $params[] = $deptFilter; }
+
+    $presentSt = $pdo->prepare("SELECT COUNT(DISTINCT e.id) c " . $baseFilter . " AND a.time_in IS NOT NULL");
+    $presentSt->execute($params); $presentCount = (int)$presentSt->fetch()['c'];
+
+    $lateSt = $pdo->prepare("SELECT COUNT(*) c FROM attendance a JOIN employees e ON e.id=a.employee_id WHERE a.company_id=? AND e.company_id=? AND a.date BETWEEN ? AND ? AND a.time_in > ?".($deptFilter>0?" AND e.department_id=?":""));
+    $lateParams = [$cid, $cid, $from, $to, $lateThreshold]; if ($deptFilter>0) $lateParams[] = $deptFilter;
+    $lateSt->execute($lateParams); $lateCount = (int)$lateSt->fetch()['c'];
+
+    $onLeaveSt = $pdo->prepare("SELECT COUNT(DISTINCT lr.employee_id) c FROM leave_requests lr JOIN employees e ON e.id=lr.employee_id WHERE lr.company_id=? AND e.company_id=? AND lr.status='approved' AND lr.start_date<=? AND lr.end_date>=?".($deptFilter>0?" AND e.department_id=?":""));
+    $leaveParams = [$cid, $cid, $to, $from]; if ($deptFilter>0) $leaveParams[] = $deptFilter;
+    $onLeaveSt->execute($leaveParams); $onLeaveCount = (int)$onLeaveSt->fetch()['c'];
+
+    $st = $pdo->prepare("SELECT COUNT(*) c FROM employees WHERE company_id=? AND status='active'".($deptFilter>0?" AND department_id=?":""));
+    $empParams = [$cid]; if ($deptFilter>0) $empParams[] = $deptFilter;
+    $st->execute($empParams); $activeEmployeesFiltered = (int)$st->fetch()['c'];
+    $absentCount = max(0, $activeEmployeesFiltered - $presentCount - $onLeaveCount);
     
     // Department distribution
     $st = $pdo->prepare("SELECT d.name, COUNT(e.id) as cnt FROM departments d 
@@ -54,6 +87,7 @@ if($hasSaas && $cid) {
     $totalDepartments = $pdo->query("SELECT COUNT(*) c FROM departments")->fetch()['c'];
     $pendingLeaves = $pdo->query("SELECT COUNT(*) c FROM leave_requests WHERE status='pending'")->fetch()['c'];
     $todayAttendance = $pdo->query("SELECT COUNT(*) c FROM attendance WHERE date=CURDATE()")->fetch()['c'];
+    $presentCount = 0; $lateCount = 0; $onLeaveCount = 0; $absentCount = 0;
     
     $deptStats = $pdo->query("SELECT d.name, COUNT(e.id) as cnt FROM departments d 
         LEFT JOIN employees e ON e.department_id=d.id AND e.status='active' 
@@ -76,6 +110,30 @@ if($hasSaas && $cid) {
 ?>
 <div class="page-header">
     <h4><i class="bi bi-graph-up me-2"></i>Reports & Analytics</h4>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form class="row g-2" method="get">
+            <div class="col-md-3"><label class="form-label mb-1">From</label><input class="form-control" type="date" name="from" value="<?= e($from) ?>"></div>
+            <div class="col-md-3"><label class="form-label mb-1">To</label><input class="form-control" type="date" name="to" value="<?= e($to) ?>"></div>
+            <div class="col-md-3"><label class="form-label mb-1">Department ID</label><input class="form-control" type="number" min="0" name="department_id" value="<?= $deptFilter ?: '' ?>" placeholder="All"></div>
+            <div class="col-md-3 d-flex align-items-end"><button class="btn btn-primary w-100"><i class="bi bi-filter me-2"></i>Apply Filters</button></div>
+        </form>
+        <div class="mt-3 d-flex gap-2 flex-wrap">
+            <a class="btn btn-outline-secondary btn-sm" href="<?= BASE_URL ?>/api/export-report.php?type=attendance&format=csv&month=<?= e(substr($from,0,7)) ?>">Export Attendance CSV</a>
+            <a class="btn btn-outline-secondary btn-sm" href="<?= BASE_URL ?>/api/export-report.php?type=leaves&format=csv&month=<?= e(substr($from,0,7)) ?>">Export Leave CSV</a>
+            <a class="btn btn-outline-secondary btn-sm" href="<?= BASE_URL ?>/api/export-report.php?type=audit&format=csv">Export Audit CSV</a>
+            <a class="btn btn-outline-primary btn-sm" target="_blank" href="<?= BASE_URL ?>/api/export-report.php?type=attendance&format=print&month=<?= e(substr($from,0,7)) ?>">Printable Attendance</a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3"><div class="stat-card success"><h6>Present</h6><h2><?= (int)$presentCount ?></h2></div></div>
+    <div class="col-md-3"><div class="stat-card warning"><h6>Late</h6><h2><?= (int)$lateCount ?></h2></div></div>
+    <div class="col-md-3"><div class="stat-card info"><h6>On Leave</h6><h2><?= (int)$onLeaveCount ?></h2></div></div>
+    <div class="col-md-3"><div class="stat-card danger"><h6>Absent</h6><h2><?= (int)$absentCount ?></h2></div></div>
 </div>
 
 <!-- Summary Cards -->

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__."/../config/db.php";
 require_once __DIR__."/../includes/auth.php";
+require_once __DIR__."/../includes/csrf.php";
 
 header("Content-Type: application/json");
 
@@ -14,6 +15,11 @@ $userId = $_SESSION["user"]["id"];
 
 if($_SERVER["REQUEST_METHOD"] === "POST") {
     $input = json_decode(file_get_contents("php://input"), true);
+    if (!verify_csrf($input["csrf_token"] ?? null)) {
+        http_response_code(400);
+        echo json_encode(["error" => "Invalid CSRF"]);
+        exit;
+    }
     
     if(isset($input["theme"])) {
         $theme = in_array($input["theme"], ["light", "dark"]) ? $input["theme"] : "light";

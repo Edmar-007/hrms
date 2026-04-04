@@ -11,6 +11,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 $code = trim($input['code'] ?? '');
 $requestedAction = trim((string)($input['action'] ?? 'auto'));
 $gps = $input['gps'] ?? null;
+$nowTs = time();
 
 if(empty($code)) {
     echo json_encode(['success' => false, 'message' => 'No QR code data received']);
@@ -49,7 +50,7 @@ $employeeName = $employee['first_name'] . ' ' . $employee['last_name'];
 $date = date('Y-m-d');
 $time = date('H:i:s');
 $nowDt = date('Y-m-d H:i:s');
-$ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255);
+$ua = substr((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 255); // attendance.user_agent column is VARCHAR(255)
 $lat = null;
 $lng = null;
 if ($gpsEnabled && is_array($gps)) {
@@ -95,7 +96,7 @@ $allowedActions = ['auto', 'time_in', 'break_in', 'break_out', 'time_out'];
 if (!in_array($requestedAction, $allowedActions, true)) $requestedAction = 'auto';
 
 $lastScanAt = $attendance['last_scan_at'] ?? null;
-if ($lastScanAt && (time() - strtotime($lastScanAt)) < $duplicateWindow) {
+if ($lastScanAt && ($nowTs - strtotime($lastScanAt)) < $duplicateWindow) {
     echo json_encode(['success' => false, 'message' => 'Duplicate scan detected. Please wait '.($duplicateWindow).' seconds.']);
     exit;
 }
@@ -110,7 +111,7 @@ if ($attendance) {
     switch ($lastAction) {
         case 'time_in':  $nextAction = 'break_in'; break;
         case 'break_in': $nextAction = 'break_out'; break;
-        case 'break_out':$nextAction = 'time_out'; break;
+        case 'break_out': $nextAction = 'time_out'; break;
         case 'time_out': $nextAction = 'done'; break;
         default:         $nextAction = 'time_in'; break;
     }
