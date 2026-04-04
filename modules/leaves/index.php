@@ -8,26 +8,37 @@ require_login();
 
 $u = $_SESSION['user'];
 $canApprove = in_array($u['role'], ['Admin', 'HR Officer', 'Manager']);
+$actionFailed = false;
 
 // Check SaaS mode
 $hasSaas = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch();
 $cid = $hasSaas ? (company_id() ?? 1) : null;
 
-// Handle approve/reject
-if(isset($_GET['action'], $_GET['id']) && $canApprove) {
-    $action = $_GET['action'];
-    $id = intval($_GET['id']);
+// Handle approve/reject (POST + CSRF)
+if(is_post() && $canApprove && verify_csrf()) {
+    $action = $_POST['action'] ?? '';
+    $id = (int)($_POST['id'] ?? 0);
     if(in_array($action, ['approved', 'rejected'])) {
         // Fetch current leave request before updating
-        $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ?");
-        $leaveReq->execute([$id]);
+        if($hasSaas && $cid) {
+            $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ? AND lr.company_id = ?");
+            $leaveReq->execute([$id, $cid]);
+        } else {
+            $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ?");
+            $leaveReq->execute([$id]);
+        }
         $leaveData = $leaveReq->fetch();
 
-        $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=?")
-            ->execute([$action, $u['id'], $id]);
+        if($hasSaas && $cid) {
+            $st = $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=? AND company_id=?");
+            $st->execute([$action, $u['id'], $id, $cid]);
+        } else {
+            $st = $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=?");
+            $st->execute([$action, $u['id'], $id]);
+        }
 
         // Auto-update leave balance
-        if ($leaveData) {
+        if ($leaveData && $st->rowCount() > 0) {
             $leaveDays = (int) ceil((strtotime($leaveData['end_date']) - strtotime($leaveData['start_date'])) / 86400) + 1;
             $year = (int) date('Y', strtotime($leaveData['start_date']));
             $empId = $leaveData['employee_id'];
@@ -47,6 +58,7 @@ if(isset($_GET['action'], $_GET['id']) && $canApprove) {
 
         header("Location: index.php?msg=$action"); exit;
     }
+    $actionFailed = true;
 }
 
 // Get leave types
@@ -92,12 +104,16 @@ if($canApprove) {
     </button>
 </div>
 
-<?php if(isset($_GET['msg'])): ?>
+<?php if(isset($_GET['msg']) || $actionFailed): ?>
 <div class="alert alert-success alert-dismissible fade show">
     <i class="bi bi-check-circle me-2"></i>
     <?php 
-    $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!'];
-    echo $msgs[$_GET['msg']] ?? 'Done!';
+    if($actionFailed) {
+        echo 'Unable to process leave action.';
+    } else {
+        $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!'];
+        echo $msgs[$_GET['msg']] ?? 'Done!';
+    }
     ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
@@ -141,12 +157,18 @@ if($canApprove) {
                     <?php if($canApprove): ?>
                     <td class="action-btns">
                         <?php if($r['status'] === 'pending'): ?>
-                        <a href="index.php?action=approved&id=<?= $r['id'] ?>" class="btn btn-sm btn-success" onclick="return confirm('Approve this leave?')">
-                            <i class="bi bi-check-lg"></i>
-                        </a>
-                        <a href="index.php?action=rejected&id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Reject this leave?')">
-                            <i class="bi bi-x-lg"></i>
-                        </a>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Approve this leave?')">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="action" value="approved">
+                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
+                        </form>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Reject this leave?')">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="action" value="rejected">
+                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i></button>
+                        </form>
                         <?php else: ?>
                         <span class="text-muted small">-</span>
                         <?php endif; ?>

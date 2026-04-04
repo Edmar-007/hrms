@@ -7,7 +7,8 @@ if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/modules/dashboard
 $err = '';
 
 if(is_post()){
-  if(!verify_csrf()) die("Invalid CSRF");
+  if(!verify_csrf()) { $err = "Invalid request. Please try again."; }
+  else {
   $email=trim($_POST['email']??''); $password=$_POST['password']??'';
   
   try {
@@ -75,7 +76,9 @@ if(is_post()){
     }
     $err="Invalid email or password";
   } catch(PDOException $e) {
-    $err = "Database error: " . $e->getMessage();
+    error_log("Login database error: ".$e->getMessage());
+    $err = "Unable to process login right now. Please try again.";
+  }
   }
 }
 ?>

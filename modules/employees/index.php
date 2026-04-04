@@ -8,16 +8,29 @@ require_login();
 
 $u = $_SESSION['user'];
 $canEdit = in_array($u['role'], ['Admin', 'HR Officer']);
-
-// Handle delete
-if(isset($_GET['delete']) && $canEdit) {
-    $pdo->prepare("UPDATE employees SET status='inactive' WHERE id=?")->execute([$_GET['delete']]);
-    header("Location: index.php?msg=deleted"); exit;
-}
+$deleteFailed = false;
 
 // Get departments and positions for dropdown
 $hasSaas = $pdo->query("SHOW COLUMNS FROM departments LIKE 'company_id'")->fetch();
 $cid = $hasSaas ? (company_id() ?? 1) : null;
+
+// Handle deactivate via POST + CSRF
+if(is_post() && $canEdit && (($_POST['action'] ?? '') === 'deactivate') && verify_csrf()) {
+    $employeeId = (int)($_POST['employee_id'] ?? 0);
+    if ($employeeId > 0) {
+        if($hasSaas && $cid) {
+            $st = $pdo->prepare("UPDATE employees SET status='inactive' WHERE id=? AND company_id=?");
+            $st->execute([$employeeId, $cid]);
+        } else {
+            $st = $pdo->prepare("UPDATE employees SET status='inactive' WHERE id=?");
+            $st->execute([$employeeId]);
+        }
+        if($st->rowCount() > 0) {
+            header("Location: index.php?msg=deleted"); exit;
+        }
+    }
+    $deleteFailed = true;
+}
 
 if($hasSaas && $cid) {
     $st = $pdo->prepare("SELECT * FROM departments WHERE company_id=? ORDER BY name");
@@ -50,10 +63,13 @@ if($hasSaas && $cid) {
     <?php endif; ?>
 </div>
 
-<?php if(isset($_GET['msg'])): ?>
+<?php if(isset($_GET['msg']) || $deleteFailed): ?>
 <div class="alert alert-success alert-dismissible fade show">
     <i class="bi bi-check-circle me-2"></i>
-    <?= $_GET['msg'] === 'added' ? 'Employee added successfully!' : ($_GET['msg'] === 'updated' ? 'Employee updated!' : 'Employee deactivated!') ?>
+    <?php
+    if($deleteFailed) echo 'Unable to deactivate employee.';
+    else echo $_GET['msg'] === 'added' ? 'Employee added successfully!' : ($_GET['msg'] === 'updated' ? 'Employee updated!' : 'Employee deactivated!');
+    ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>
@@ -94,9 +110,14 @@ if($hasSaas && $cid) {
                         <a href="qrcode.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-primary" title="QR Code"><i class="bi bi-qr-code"></i></a>
                         <a href="edit.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-info" title="Edit"><i class="bi bi-pencil"></i></a>
                         <?php if($r['status'] === 'active'): ?>
-                        <a href="index.php?delete=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Deactivate this employee?')" title="Deactivate">
-                            <i class="bi bi-trash"></i>
-                        </a>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Deactivate this employee?')">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="action" value="deactivate">
+                            <input type="hidden" name="employee_id" value="<?= (int)$r['id'] ?>">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Deactivate">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
                         <?php endif; ?>
                     </td>
                     <?php endif; ?>
