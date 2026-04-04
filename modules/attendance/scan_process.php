@@ -15,8 +15,16 @@ if(empty($code)) {
 }
 
 // Find employee by employee_code (QR code contains employee_code)
-$st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE employee_code = ? AND status = 'active'");
-$st->execute([$code]);
+// In SaaS mode restrict to current company to prevent cross-tenant access
+$hasSaas = $pdo->query("SHOW COLUMNS FROM employees LIKE 'company_id'")->fetch();
+if($hasSaas) {
+    $cid = company_id() ?? 1;
+    $st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE employee_code = ? AND status = 'active' AND company_id = ?");
+    $st->execute([$code, $cid]);
+} else {
+    $st = $pdo->prepare("SELECT id, employee_code, first_name, last_name FROM employees WHERE employee_code = ? AND status = 'active'");
+    $st->execute([$code]);
+}
 $employee = $st->fetch();
 
 if(!$employee) {

@@ -12,7 +12,7 @@ $companyId = 1;
 if($hasSaas) {
     $check = $pdo->query("SELECT id FROM companies LIMIT 1")->fetch();
     if(!$check) {
-        $pdo->exec("INSERT INTO companies (id, name, slug, email, plan, max_employees) VALUES (1, 'Demo Company', 'demo', 'admin@hrms.local', 'professional', 100)");
+        $pdo->prepare("INSERT INTO companies (id, name, slug, email, plan, max_employees) VALUES (1, 'Demo Company', 'demo', 'admin@hrms.local', 'professional', 100)")->execute([]);
         echo "✓ Created company\n";
     }
 }
@@ -197,11 +197,11 @@ $adminCheck = $pdo->query("SELECT id FROM users WHERE email='admin@hrms.local'")
 if(!$adminCheck) {
     $adminEmp = $pdo->query("SELECT id FROM employees WHERE employee_code='EMP-0001'")->fetch();
     if(!$adminEmp) {
-        if($hasSaas) {
-            $pdo->exec("INSERT INTO employees (company_id, employee_code, first_name, last_name, email, department_id, position_id, basic_salary, status) VALUES ($companyId, 'EMP-0001', 'System', 'Admin', 'admin@hrms.local', 1, 1, 50000, 'active')");
-        } else {
-            $pdo->exec("INSERT INTO employees (employee_code, first_name, last_name, email, department_id, position_id, basic_salary, status) VALUES ('EMP-0001', 'System', 'Admin', 'admin@hrms.local', 1, 1, 50000, 'active')");
-        }
+    if($hasSaas) {
+        $pdo->prepare("INSERT INTO employees (company_id, employee_code, first_name, last_name, email, department_id, position_id, basic_salary, status) VALUES (?, 'EMP-0001', 'System', 'Admin', 'admin@hrms.local', 1, 1, 50000, 'active')")->execute([$companyId]);
+    } else {
+        $pdo->prepare("INSERT INTO employees (employee_code, first_name, last_name, email, department_id, position_id, basic_salary, status) VALUES ('EMP-0001', 'System', 'Admin', 'admin@hrms.local', 1, 1, 50000, 'active')")->execute([]);
+    }
         $adminEmp = $pdo->query("SELECT id FROM employees WHERE employee_code='EMP-0001'")->fetch();
     }
     
@@ -253,19 +253,17 @@ if($hasSaas) {
     } catch(Exception $e) {}
     
     try {
-        $pdo->exec("DELETE FROM notifications WHERE company_id = $companyId");
-        $pdo->exec("INSERT INTO notifications (company_id, user_id, type, title, message, is_read, created_at) VALUES 
-            ($companyId, 1, 'leave', 'New Leave Request', 'Maria Santos requested vacation leave', 0, NOW()),
-            ($companyId, 1, 'attendance', 'Late Arrival Alert', '3 employees arrived late today', 0, DATE_SUB(NOW(), INTERVAL 2 HOUR)),
-            ($companyId, NULL, 'announcement', 'System Maintenance', 'Scheduled maintenance this weekend', 0, DATE_SUB(NOW(), INTERVAL 3 DAY))");
+        $pdo->prepare("DELETE FROM notifications WHERE company_id = ?")->execute([$companyId]);
+        $pdo->prepare("INSERT INTO notifications (company_id, user_id, type, title, message, is_read, created_at) VALUES (?, 1, 'leave', 'New Leave Request', 'Maria Santos requested vacation leave', 0, NOW())")->execute([$companyId]);
+        $pdo->prepare("INSERT INTO notifications (company_id, user_id, type, title, message, is_read, created_at) VALUES (?, 1, 'attendance', 'Late Arrival Alert', '3 employees arrived late today', 0, DATE_SUB(NOW(), INTERVAL 2 HOUR))")->execute([$companyId]);
+        $pdo->prepare("INSERT INTO notifications (company_id, user_id, type, title, message, is_read, created_at) VALUES (?, NULL, 'announcement', 'System Maintenance', 'Scheduled maintenance this weekend', 0, DATE_SUB(NOW(), INTERVAL 3 DAY))")->execute([$companyId]);
         echo "✓ Added notifications\n";
     } catch(Exception $e) {}
     
     try {
-        $pdo->exec("DELETE FROM announcements WHERE company_id = $companyId");
-        $pdo->exec("INSERT INTO announcements (company_id, title, content, priority, is_pinned, published_at, created_by) VALUES 
-            ($companyId, 'Welcome to HRMS!', 'We are excited to launch our new HR Management System.', 'high', 1, NOW(), 1),
-            ($companyId, 'QR Code Attendance', 'We have implemented QR code based attendance system.', 'normal', 0, DATE_SUB(NOW(), INTERVAL 5 DAY), 1)");
+        $pdo->prepare("DELETE FROM announcements WHERE company_id = ?")->execute([$companyId]);
+        $pdo->prepare("INSERT INTO announcements (company_id, title, content, priority, is_pinned, published_at, created_by) VALUES (?, 'Welcome to HRMS!', 'We are excited to launch our new HR Management System.', 'high', 1, NOW(), 1)")->execute([$companyId]);
+        $pdo->prepare("INSERT INTO announcements (company_id, title, content, priority, is_pinned, published_at, created_by) VALUES (?, 'QR Code Attendance', 'We have implemented QR code based attendance system.', 'normal', 0, DATE_SUB(NOW(), INTERVAL 5 DAY), 1)")->execute([$companyId]);
         echo "✓ Added announcements\n";
     } catch(Exception $e) {}
     

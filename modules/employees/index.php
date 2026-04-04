@@ -9,9 +9,17 @@ require_login();
 $u = $_SESSION['user'];
 $canEdit = in_array($u['role'], ['Admin', 'HR Officer']);
 
-// Handle delete
-if(isset($_GET['delete']) && $canEdit) {
-    $pdo->prepare("UPDATE employees SET status='inactive' WHERE id=?")->execute([$_GET['delete']]);
+// Handle delete (POST with CSRF to prevent CSRF attacks)
+if(is_post() && isset($_POST['delete_id']) && $canEdit && verify_csrf()) {
+    $deleteId = intval($_POST['delete_id']);
+    // In SaaS mode also verify the employee belongs to the current company
+    $hasSaasCheck = $pdo->query("SHOW COLUMNS FROM employees LIKE 'company_id'")->fetch();
+    if($hasSaasCheck) {
+        $cid = company_id() ?? 1;
+        $pdo->prepare("UPDATE employees SET status='inactive' WHERE id=? AND company_id=?")->execute([$deleteId, $cid]);
+    } else {
+        $pdo->prepare("UPDATE employees SET status='inactive' WHERE id=?")->execute([$deleteId]);
+    }
     header("Location: index.php?msg=deleted"); exit;
 }
 
@@ -94,9 +102,11 @@ if($hasSaas && $cid) {
                         <a href="qrcode.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-primary" title="QR Code"><i class="bi bi-qr-code"></i></a>
                         <a href="edit.php?id=<?= $r['id'] ?>" class="btn btn-sm btn-info" title="Edit"><i class="bi bi-pencil"></i></a>
                         <?php if($r['status'] === 'active'): ?>
-                        <a href="index.php?delete=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Deactivate this employee?')" title="Deactivate">
-                            <i class="bi bi-trash"></i>
-                        </a>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Deactivate this employee?')">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="delete_id" value="<?= intval($r['id']) ?>">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Deactivate"><i class="bi bi-trash"></i></button>
+                        </form>
                         <?php endif; ?>
                     </td>
                     <?php endif; ?>

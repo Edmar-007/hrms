@@ -12,13 +12,25 @@ if(!$id && $_SESSION['user']['employee_id']) {
     $id = $_SESSION['user']['employee_id'];
 }
 
-$emp = $pdo->prepare("SELECT e.*, d.name as dept_name, p.name as pos_name 
-    FROM employees e 
-    LEFT JOIN departments d ON d.id=e.department_id 
-    LEFT JOIN positions p ON p.id=e.position_id 
-    WHERE e.id=?");
-$emp->execute([$id]);
-$emp = $emp->fetch();
+// Check SaaS mode for company isolation
+$hasSaas = $pdo->query("SHOW COLUMNS FROM employees LIKE 'company_id'")->fetch();
+if($hasSaas) {
+    $cid = company_id() ?? 1;
+    $empStmt = $pdo->prepare("SELECT e.*, d.name as dept_name, p.name as pos_name 
+        FROM employees e 
+        LEFT JOIN departments d ON d.id=e.department_id 
+        LEFT JOIN positions p ON p.id=e.position_id 
+        WHERE e.id=? AND e.company_id=?");
+    $empStmt->execute([$id, $cid]);
+} else {
+    $empStmt = $pdo->prepare("SELECT e.*, d.name as dept_name, p.name as pos_name 
+        FROM employees e 
+        LEFT JOIN departments d ON d.id=e.department_id 
+        LEFT JOIN positions p ON p.id=e.position_id 
+        WHERE e.id=?");
+    $empStmt->execute([$id]);
+}
+$emp = $empStmt->fetch();
 
 if(!$emp) { header("Location: index.php"); exit; }
 
@@ -68,8 +80,8 @@ $qrData = $emp['employee_code'];
 
 <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
 <script>
-const qrData = '<?= $qrData ?>';
-const empName = '<?= e($emp['first_name'] . '_' . $emp['last_name']) ?>';
+const qrData = <?= json_encode($qrData) ?>;
+const empName = <?= json_encode($emp['first_name'] . '_' . $emp['last_name']) ?>;
 
 // Generate QR Code
 QRCode.toCanvas(document.createElement('canvas'), qrData, {

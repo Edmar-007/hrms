@@ -8,8 +8,17 @@ require_login();
 require_role(['Admin', 'HR Officer']);
 
 $id = intval($_GET['id'] ?? 0);
-$emp = $pdo->prepare("SELECT * FROM employees WHERE id=?");
-$emp->execute([$id]);
+
+// Check SaaS mode for company isolation
+$hasSaas = $pdo->query("SHOW COLUMNS FROM employees LIKE 'company_id'")->fetch();
+if($hasSaas) {
+    $cid = company_id() ?? 1;
+    $emp = $pdo->prepare("SELECT * FROM employees WHERE id=? AND company_id=?");
+    $emp->execute([$id, $cid]);
+} else {
+    $emp = $pdo->prepare("SELECT * FROM employees WHERE id=?");
+    $emp->execute([$id]);
+}
 $emp = $emp->fetch();
 if(!$emp) { header("Location: index.php"); exit; }
 
@@ -23,16 +32,28 @@ if(is_post() && verify_csrf()) {
     $dept = $_POST['department_id'] ?: null;
     $pos = $_POST['position_id'] ?: null;
     $status = $_POST['status'] ?? 'active';
-    
-    $st = $pdo->prepare("UPDATE employees SET employee_code=?, email=?, first_name=?, last_name=?, phone=?, basic_salary=?, department_id=?, position_id=?, status=? WHERE id=?");
-    $st->execute([$code, $email, $first, $last, $phone, $salary, $dept, $pos, $status, $id]);
-    
+
+    if($hasSaas) {
+        $st = $pdo->prepare("UPDATE employees SET employee_code=?, email=?, first_name=?, last_name=?, phone=?, basic_salary=?, department_id=?, position_id=?, status=? WHERE id=? AND company_id=?");
+        $st->execute([$code, $email, $first, $last, $phone, $salary, $dept, $pos, $status, $id, $cid]);
+    } else {
+        $st = $pdo->prepare("UPDATE employees SET employee_code=?, email=?, first_name=?, last_name=?, phone=?, basic_salary=?, department_id=?, position_id=?, status=? WHERE id=?");
+        $st->execute([$code, $email, $first, $last, $phone, $salary, $dept, $pos, $status, $id]);
+    }
+
     header("Location: index.php?msg=updated");
     exit;
 }
 
-$departments = $pdo->query("SELECT * FROM departments ORDER BY name")->fetchAll();
-$positions = $pdo->query("SELECT * FROM positions ORDER BY name")->fetchAll();
+if($hasSaas) {
+    $st = $pdo->prepare("SELECT * FROM departments WHERE company_id=? ORDER BY name");
+    $st->execute([$cid]); $departments = $st->fetchAll();
+    $st = $pdo->prepare("SELECT * FROM positions WHERE company_id=? ORDER BY name");
+    $st->execute([$cid]); $positions = $st->fetchAll();
+} else {
+    $departments = $pdo->query("SELECT * FROM departments ORDER BY name")->fetchAll();
+    $positions = $pdo->query("SELECT * FROM positions ORDER BY name")->fetchAll();
+}
 ?>
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-pencil me-2"></i>Edit Employee</h4>

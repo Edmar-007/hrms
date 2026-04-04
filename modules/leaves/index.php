@@ -13,10 +13,10 @@ $canApprove = in_array($u['role'], ['Admin', 'HR Officer', 'Manager']);
 $hasSaas = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch();
 $cid = $hasSaas ? (company_id() ?? 1) : null;
 
-// Handle approve/reject
-if(isset($_GET['action'], $_GET['id']) && $canApprove) {
-    $action = $_GET['action'];
-    $id = intval($_GET['id']);
+// Handle approve/reject (POST with CSRF to prevent CSRF attacks)
+if(is_post() && isset($_POST['action'], $_POST['id']) && $canApprove && verify_csrf()) {
+    $action = $_POST['action'];
+    $id = intval($_POST['id']);
     if(in_array($action, ['approved', 'rejected'])) {
         $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=?")
             ->execute([$action, $u['id'], $id]);
@@ -116,12 +116,18 @@ if($canApprove) {
                     <?php if($canApprove): ?>
                     <td class="action-btns">
                         <?php if($r['status'] === 'pending'): ?>
-                        <a href="index.php?action=approved&id=<?= $r['id'] ?>" class="btn btn-sm btn-success" onclick="return confirm('Approve this leave?')">
-                            <i class="bi bi-check-lg"></i>
-                        </a>
-                        <a href="index.php?action=rejected&id=<?= $r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Reject this leave?')">
-                            <i class="bi bi-x-lg"></i>
-                        </a>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Approve this leave?')">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="action" value="approved">
+                            <input type="hidden" name="id" value="<?= intval($r['id']) ?>">
+                            <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
+                        </form>
+                        <form method="post" class="d-inline" onsubmit="return confirm('Reject this leave?')">
+                            <?= csrf_input() ?>
+                            <input type="hidden" name="action" value="rejected">
+                            <input type="hidden" name="id" value="<?= intval($r['id']) ?>">
+                            <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i></button>
+                        </form>
                         <?php else: ?>
                         <span class="text-muted small">-</span>
                         <?php endif; ?>
