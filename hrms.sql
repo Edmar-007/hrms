@@ -355,9 +355,262 @@ INSERT INTO activity_logs(company_id, user_id, action, entity_type, entity_id, d
 (1, 2, 'login', 'user', 2, '{"browser":"Firefox"}', '192.168.1.101', DATE_SUB(NOW(), INTERVAL 1 HOUR));
 
 -- User preferences for other users
-INSERT INTO user_preferences(user_id, theme) VALUES 
+INSERT INTO user_preferences(user_id, theme) VALUES
 (2, 'dark'),
 (3, 'light'),
 (4, 'light'),
 (5, 'dark'),
 (6, 'light');
+
+-- =====================================================
+-- NEW TABLES FOR COMPLETE HRMS FEATURES
+-- =====================================================
+
+-- SHIFTS - Define work schedules
+CREATE TABLE IF NOT EXISTS shifts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    lunch_start TIME NULL,
+    lunch_end TIME NULL,
+    total_break_minutes INT DEFAULT 60,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_shift(company_id, name),
+    INDEX idx_company(company_id)
+);
+
+-- SHIFT_ASSIGNMENTS - Assign shifts to employees
+CREATE TABLE IF NOT EXISTS shift_assignments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    shift_id INT NOT NULL,
+    effective_from DATE NOT NULL,
+    effective_to DATE NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (shift_id) REFERENCES shifts(id),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    INDEX idx_emp_date(employee_id, effective_from),
+    INDEX idx_company(company_id)
+);
+
+-- HOLIDAYS - Company holidays and rest days
+CREATE TABLE IF NOT EXISTS holidays (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    holiday_date DATE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    is_public TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_holiday(company_id, holiday_date),
+    INDEX idx_company_date(company_id, holiday_date)
+);
+
+-- BREAK_RECORDS - Track individual breaks
+CREATE TABLE IF NOT EXISTS break_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    attendance_id INT NOT NULL,
+    break_start DATETIME NOT NULL,
+    break_end DATETIME NULL,
+    duration_minutes INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (attendance_id) REFERENCES attendance(id),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    INDEX idx_attendance(attendance_id),
+    INDEX idx_company(company_id)
+);
+
+-- EMPLOYEE_LEAVE_BALANCE - Track leave usage
+CREATE TABLE IF NOT EXISTS employee_leave_balance (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    leave_type_id INT NOT NULL,
+    year INT NOT NULL,
+    opening_balance INT NOT NULL,
+    used INT DEFAULT 0,
+    carried_over INT DEFAULT 0,
+    remaining INT GENERATED ALWAYS AS (opening_balance + carried_over - used) STORED,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_balance(company_id, employee_id, leave_type_id, year),
+    FOREIGN KEY (leave_type_id) REFERENCES leave_types(id),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    INDEX idx_emp_year(employee_id, year),
+    INDEX idx_company(company_id)
+);
+
+-- SALARY_STRUCTURES - Flexible salary components framework
+CREATE TABLE IF NOT EXISTS salary_structures (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_struct(company_id, name),
+    INDEX idx_company(company_id)
+);
+
+-- SALARY_COMPONENTS - Individual salary components (earnings & deductions)
+CREATE TABLE IF NOT EXISTS salary_components (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    salary_structure_id INT NOT NULL,
+    component_type ENUM('earning','deduction') NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    type ENUM('fixed','percentage') DEFAULT 'fixed',
+    value DECIMAL(10,2) DEFAULT 0,
+    order_seq INT DEFAULT 0,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (salary_structure_id) REFERENCES salary_structures(id) ON DELETE CASCADE,
+    INDEX idx_struct(salary_structure_id),
+    INDEX idx_company(company_id)
+);
+
+-- EMPLOYEE_SALARY_COMPONENTS - Individual employee allowances/deductions
+CREATE TABLE IF NOT EXISTS employee_salary_components (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    component_type ENUM('earning','deduction') NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    type ENUM('fixed','percentage') DEFAULT 'fixed',
+    value DECIMAL(10,2) DEFAULT 0,
+    effective_from DATE NOT NULL,
+    effective_to DATE NULL,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    INDEX idx_emp_date(employee_id, effective_from),
+    INDEX idx_company(company_id)
+);
+
+-- PAYROLL_RECORDS - Store calculated payslips (audit trail, not real-time)
+CREATE TABLE IF NOT EXISTS payroll_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    payroll_period_start DATE NOT NULL,
+    payroll_period_end DATE NOT NULL,
+    total_earnings DECIMAL(12,2) DEFAULT 0,
+    total_deductions DECIMAL(12,2) DEFAULT 0,
+    net_pay DECIMAL(12,2) DEFAULT 0,
+    status ENUM('draft','processed','paid','cancelled') DEFAULT 'draft',
+    processed_by INT NULL,
+    processed_at DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_payroll(company_id, employee_id, payroll_period_start),
+    FOREIGN KEY (processed_by) REFERENCES users(id),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    INDEX idx_emp_period(employee_id, payroll_period_start),
+    INDEX idx_company(company_id)
+);
+
+-- PAYROLL_ITEMS - Line items for payroll (deductions & allowances per payslip)
+CREATE TABLE IF NOT EXISTS payroll_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    payroll_record_id INT NOT NULL,
+    component_name VARCHAR(100) NOT NULL,
+    component_type ENUM('earning','deduction') NOT NULL,
+    amount DECIMAL(12,2) DEFAULT 0,
+    calculation_details JSON,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (payroll_record_id) REFERENCES payroll_records(id) ON DELETE CASCADE,
+    INDEX idx_payroll(payroll_record_id)
+);
+
+-- THIRTEENTH_MONTH_RECORDS - 13th month pay computation (Philippines requirement)
+CREATE TABLE IF NOT EXISTS thirteenth_month_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    year INT NOT NULL,
+    total_basic_earned DECIMAL(12,2) DEFAULT 0,
+    thirteenth_month_amount DECIMAL(12,2) DEFAULT 0,
+    less_absences DECIMAL(12,2) DEFAULT 0,
+    less_unpaid_leave DECIMAL(12,2) DEFAULT 0,
+    final_amount DECIMAL(12,2) DEFAULT 0,
+    computation_date DATE NOT NULL,
+    status ENUM('draft','finalized','paid') DEFAULT 'draft',
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_13th(company_id, employee_id, year),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    INDEX idx_emp_year(employee_id, year),
+    INDEX idx_company(company_id)
+);
+
+-- ATTENDANCE_EXCEPTIONS - Mark absences, half-days, late arrivals, etc.
+CREATE TABLE IF NOT EXISTS attendance_exceptions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    exception_date DATE NOT NULL,
+    exception_type ENUM('absence','half_day','late_arrival','early_departure','undertime','lwop') DEFAULT 'absence',
+    remarks TEXT,
+    is_approved TINYINT(1) DEFAULT 0,
+    approved_by INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_exception(company_id, employee_id, exception_date, exception_type),
+    FOREIGN KEY (employee_id) REFERENCES employees(id),
+    INDEX idx_emp_date(employee_id, exception_date),
+    INDEX idx_company(company_id)
+);
+
+-- ATTENDANCE_SETTINGS - Grace period, undertime rules, work hours per company
+CREATE TABLE IF NOT EXISTS attendance_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL UNIQUE,
+    grace_period_minutes INT DEFAULT 10,
+    undertime_threshold_minutes INT DEFAULT 480,
+    weekend_days VARCHAR(20) DEFAULT '0,6',
+    daily_work_hours DECIMAL(5,2) DEFAULT 8,
+    allow_overtime TINYINT(1) DEFAULT 1,
+    overtime_start_hour DECIMAL(5,2) DEFAULT 8.5,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id)
+);
+
+-- Insert default shift (8am-5pm with 1 hour lunch)
+INSERT INTO shifts (company_id, name, start_time, end_time, lunch_start, lunch_end, total_break_minutes)
+VALUES (1, 'Standard (8AM-5PM)', '08:00:00', '17:00:00', '12:00:00', '13:00:00', 60);
+
+-- Insert default salary structure
+INSERT INTO salary_structures (company_id, name, description)
+VALUES (1, 'Standard', 'Default salary structure for all employees');
+
+-- Insert common salary components for the default structure (last ID will be used)
+INSERT INTO salary_components (company_id, salary_structure_id, component_type, name, type, value, order_seq)
+VALUES
+(1, 1, 'earning', 'Basic Salary', 'fixed', 0, 1),
+(1, 1, 'deduction', 'SSS', 'percentage', 4.5, 2),
+(1, 1, 'deduction', 'PhilHealth', 'percentage', 3.5, 3),
+(1, 1, 'deduction', 'Pag-IBIG', 'fixed', 100, 4),
+(1, 1, 'deduction', 'Withholding Tax', 'percentage', 2, 5);
+
+-- Create attendance settings for default company
+INSERT INTO attendance_settings (company_id, grace_period_minutes, daily_work_hours)
+VALUES (1, 10, 8);
+
+-- Initialize leave balances for existing employees (2026)
+INSERT INTO employee_leave_balance (company_id, employee_id, leave_type_id, year, opening_balance, carried_over)
+SELECT c.id, e.id, lt.id, YEAR(CURDATE()), lt.days_allowed, 0
+FROM employees e
+CROSS JOIN (SELECT DISTINCT company_id as id FROM companies) c
+CROSS JOIN leave_types lt
+WHERE e.company_id = c.id AND lt.company_id = c.id
+ON DUPLICATE KEY UPDATE opening_balance = VALUES(opening_balance);
