@@ -64,7 +64,7 @@ if($hasSaas && $cid) {
 </div>
 
 <?php if(isset($_GET['msg']) || $deleteFailed): ?>
-<div class="alert alert-success alert-dismissible fade show">
+<div class="alert <?= $deleteFailed ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
     <i class="bi bi-check-circle me-2"></i>
     <?php
     if($deleteFailed) echo 'Unable to deactivate employee.';

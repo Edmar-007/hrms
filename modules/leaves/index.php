@@ -105,7 +105,7 @@ if($canApprove) {
 </div>
 
 <?php if(isset($_GET['msg']) || $actionFailed): ?>
-<div class="alert alert-success alert-dismissible fade show">
+<div class="alert <?= $actionFailed ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
     <i class="bi bi-check-circle me-2"></i>
     <?php 
     if($actionFailed) {
