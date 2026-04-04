@@ -7,8 +7,11 @@ require_once __DIR__.'/../../includes/nav.php';
 require_login();
 require_role(['Admin', 'HR Officer']);
 
-// Get month filter
+// Get month filter and validate format
 $month = $_GET['month'] ?? date('Y-m');
+if(!preg_match('/^\d{4}-\d{2}$/', $month)) {
+    $month = date('Y-m');
+}
 
 // Check SaaS mode
 $hasSaas = $pdo->query("SHOW COLUMNS FROM employees LIKE 'company_id'")->fetch();

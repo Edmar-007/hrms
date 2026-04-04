@@ -138,8 +138,8 @@ if(is_post()){
                         <div class="row g-2">
                             <?php foreach($plans as $p): ?>
                             <div class="col-6">
-                                <input type="radio" class="btn-check" name="plan" id="plan-<?= $p['slug'] ?>" value="<?= $p['slug'] ?>" <?= $p['slug']==='free'?'checked':'' ?>>
-                                <label class="btn btn-outline-primary w-100 py-3" for="plan-<?= $p['slug'] ?>">
+                                <input type="radio" class="btn-check" name="plan" id="plan-<?= e($p['slug']) ?>" value="<?= e($p['slug']) ?>" <?= $p['slug']==='free'?'checked':'' ?>>
+                                <label class="btn btn-outline-primary w-100 py-3" for="plan-<?= e($p['slug']) ?>">
                                     <strong class="d-block"><?= e($p['name']) ?></strong>
                                     <small class="text-muted"><?= $p['price_monthly'] > 0 ? '₱'.number_format($p['price_monthly']).'/mo' : 'Free' ?></small>
                                 </label>
