@@ -134,7 +134,6 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $success = "Position deleted!";
     }
 
-<<<<<<< HEAD
     if($action === "update_attendance_policy") {
         $grace = max(0, (int)($_POST["grace_period_minutes"] ?? 10));
         $dupInput = $_POST["duplicate_scan_seconds"] ?? 3;
@@ -153,7 +152,6 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $success = "Attendance policy updated!";
     }
     
-=======
     if($action === "add_leave_type") {
         $name    = trim($_POST["lt_name"]);
         $days    = (int)$_POST["lt_days"];
@@ -205,24 +203,23 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
         $new     = $_POST["new_password"] ?? "";
         $confirm = $_POST["confirm_password"] ?? "";
 
-        $st = $pdo->prepare("SELECT password FROM users WHERE id=?");
+        $st = $pdo->prepare("SELECT password_hash FROM users WHERE id=?");
         $st->execute([$user["id"]]);
         $row = $st->fetch();
 
-        if(!$row || !password_verify($current, $row["password"])) {
+        if(!$row || !password_verify($current, $row["password_hash"])) {
             $error = "Current password is incorrect.";
         } elseif(strlen($new) < 8) {
             $error = "New password must be at least 8 characters.";
         } elseif($new !== $confirm) {
             $error = "New passwords do not match.";
         } else {
-            $pdo->prepare("UPDATE users SET password=? WHERE id=?")->execute([password_hash($new, PASSWORD_DEFAULT), $user["id"]]);
+            $pdo->prepare("UPDATE users SET password_hash=? WHERE id=?")->execute([password_hash($new, PASSWORD_DEFAULT), $user["id"]]);
             $success = "Password changed successfully!";
             log_activity("update", "user_password", $user["id"]);
         }
     }
 
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
     // Reload company data
     $cid = company_id() ?? 1;
     $st = $pdo->prepare("SELECT * FROM companies WHERE id = ?");
@@ -280,7 +277,7 @@ try {
 
 // Determine active tab from query string (for post-redirect-get pattern)
 $activeTab = $_GET["tab"] ?? "company";
-$allowed = ["company","org","leaves","schedule","appearance","security","subscription"];
+$allowed = ["company","org","leaves","schedule","appearance","security","subscription","attendance"];
 if(!in_array($activeTab, $allowed)) $activeTab = "company";
 
 $attSet = $pdo->prepare("SELECT * FROM attendance_settings WHERE company_id = ? LIMIT 1");
@@ -335,6 +332,9 @@ require_once __DIR__."/../../includes/nav.php";
                         </button>
                         <button class="nav-link <?= $activeTab==='org'?'active':'' ?>" data-tab="org" onclick="switchTab('org')">
                             <i class="bi bi-diagram-3"></i> Organization
+                        </button>
+                        <button class="nav-link <?= $activeTab==='attendance'?'active':'' ?>" data-tab="attendance" onclick="switchTab('attendance')">
+                            <i class="bi bi-shield-check"></i> Attendance Policy
                         </button>
                         <button class="nav-link <?= $activeTab==='leaves'?'active':'' ?>" data-tab="leaves" onclick="switchTab('leaves')">
                             <i class="bi bi-calendar-week"></i> Leave Types
@@ -415,15 +415,14 @@ require_once __DIR__."/../../includes/nav.php";
                 </div>
             </div>
 
-<<<<<<< HEAD
-        <div class="row">
-            <div class="col-12 mb-4">
+            <!-- ===== ATTENDANCE POLICY ===== -->
+            <div id="tab-attendance" class="settings-section <?= $activeTab==='attendance'?'active':'' ?>">
                 <div class="card border-0 shadow-sm">
-                    <div class="card-header bg-white">
-                        <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Attendance Scan Policy</h5>
+                    <div class="card-header">
+                        <i class="bi bi-shield-check me-2"></i>Attendance Scan Policy
                     </div>
                     <div class="card-body">
-                        <form method="POST">
+                        <form method="POST" action="?tab=attendance">
                             <?= csrf_input() ?>
                             <input type="hidden" name="action" value="update_attendance_policy">
                             <div class="row g-3">
@@ -459,18 +458,7 @@ require_once __DIR__."/../../includes/nav.php";
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="row">
-            <!-- Departments -->
-            <div class="col-md-6 mb-4">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="bi bi-diagram-3 me-2"></i>Departments</h5>
-                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addDeptModal">
-                            <i class="bi bi-plus-lg"></i>
-                        </button>
-=======
             <!-- ===== ORGANIZATION (Departments + Positions) ===== -->
             <div id="tab-org" class="settings-section <?= $activeTab==='org'?'active':'' ?>">
                 <div class="row g-4">
@@ -508,7 +496,6 @@ require_once __DIR__."/../../includes/nav.php";
                                 </ul>
                             </div>
                         </div>
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
                     </div>
 
                     <!-- Positions -->

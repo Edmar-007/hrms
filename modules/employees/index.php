@@ -134,23 +134,6 @@ $totalInactive = count($rows) - $totalActive;
             </thead>
             <tbody>
             <?php if(empty($rows)): ?>
-<<<<<<< HEAD
-                <tr><td colspan="7" class="text-center py-4 text-muted">No employees found</td></tr>
-            <?php else: foreach($rows as $r): ?>
-                <tr>
-                    <td><code><?= e($r['employee_code']) ?></code></td>
-                    <td>
-                        <?php if(!empty($r['photo_path'])): ?>
-                            <img src="<?= BASE_URL . e($r['photo_path']) ?>" alt="photo" style="width:28px;height:28px;border-radius:50%;object-fit:cover" class="me-2">
-                        <?php else: ?>
-                            <i class="bi bi-person-circle me-2 text-muted"></i>
-                        <?php endif; ?>
-                        <?= e($r['first_name'].' '.$r['last_name']) ?>
-                    </td>
-                    <td><?= e($r['email']) ?></td>
-                    <td><?= e($r['dept_name'] ?? '-') ?></td>
-                    <td><?= e($r['pos_name'] ?? '-') ?></td>
-=======
                 <tr><td colspan="6" class="text-center py-5 text-muted">
                     <i class="bi bi-people fs-2 d-block mb-2 opacity-25"></i>No employees found
                 </td></tr>
@@ -162,9 +145,13 @@ $totalInactive = count($rows) - $totalActive;
                     <td class="text-muted"><?= $idx+1 ?></td>
                     <td>
                         <div class="d-flex align-items-center gap-2">
-                            <div class="avatar-sm" style="background:<?= $color ?>;">
-                                <?= strtoupper(substr($r['first_name'],0,1).substr($r['last_name'],0,1)) ?>
-                            </div>
+                            <?php if(!empty($r['photo_path'])): ?>
+                                <img src="<?= BASE_URL . e($r['photo_path']) ?>" alt="photo" style="width:36px;height:36px;border-radius:50%;object-fit:cover">
+                            <?php else: ?>
+                                <div class="avatar-sm" style="background:<?= $color ?>;">
+                                    <?= strtoupper(substr($r['first_name'],0,1).substr($r['last_name'],0,1)) ?>
+                                </div>
+                            <?php endif; ?>
                             <div>
                                 <div class="fw-semibold"><?= e($r['first_name'].' '.$r['last_name']) ?></div>
                                 <small class="text-muted"><code><?= e($r['employee_code']) ?></code></small>
@@ -181,7 +168,6 @@ $totalInactive = count($rows) - $totalActive;
                         <div><?= e($r['dept_name'] ?? '—') ?></div>
                         <small class="text-muted"><?= e($r['pos_name'] ?? '—') ?></small>
                     </td>
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
                     <td>
                         <?php if($r['status'] === 'active'): ?>
                             <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Active</span>

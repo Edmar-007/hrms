@@ -126,24 +126,18 @@ $userHasEmployeeId = !empty($u['employee_id']);
 ?>
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-calendar-check me-2"></i>Leave Requests</h4>
-<<<<<<< HEAD
     <div class="d-flex gap-2">
         <a href="calendar.php" class="btn btn-outline-secondary"><i class="bi bi-calendar3 me-2"></i>Calendar</a>
+        <?php if($userHasEmployeeId): ?>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
             <i class="bi bi-plus-lg me-2"></i>Request Leave
         </button>
+        <?php else: ?>
+        <button class="btn btn-secondary" disabled title="Your account is not linked to an employee profile">
+            <i class="bi bi-plus-lg me-2"></i>Request Leave
+        </button>
+        <?php endif; ?>
     </div>
-=======
-    <?php if($userHasEmployeeId): ?>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
-        <i class="bi bi-plus-lg me-2"></i>Request Leave
-    </button>
-    <?php else: ?>
-    <button class="btn btn-secondary" disabled title="Your account is not linked to an employee profile">
-        <i class="bi bi-plus-lg me-2"></i>Request Leave
-    </button>
-    <?php endif; ?>
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
 </div>
 
 <?php if(!$userHasEmployeeId && !$canApprove): ?>
@@ -157,17 +151,12 @@ $userHasEmployeeId = !empty($u['employee_id']);
 <div class="alert <?= $actionFailed || $_GET['msg'] === 'error' ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
     <i class="bi bi-<?= $actionFailed || $_GET['msg'] === 'error' ? 'exclamation-circle' : 'check-circle' ?> me-2"></i>
     <?php 
-<<<<<<< HEAD
     if($actionFailed) {
         echo !empty($permissionDenied) ? 'You do not have permission to perform this action.' : 'Unable to process leave action.';
-    } else {
-        $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!', 'cancelled' => 'Leave cancelled!'];
-=======
-    if($actionFailed || ($_GET['msg'] ?? '') === 'error') {
+    } elseif(($_GET['msg'] ?? '') === 'error') {
         echo 'Unable to process leave request. Please ensure all fields are filled correctly.';
     } else {
-        $msgs = ['added'=>'Leave request submitted successfully!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!'];
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
+        $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!', 'cancelled' => 'Leave cancelled!'];
         echo $msgs[$_GET['msg']] ?? 'Done!';
     }
     ?>
@@ -201,24 +190,17 @@ $userHasEmployeeId = !empty($u['employee_id']);
                     <th>Leave Type</th>
                     <th>Period</th>
                     <th>Days</th>
-<<<<<<< HEAD
-                    <th>Attachment</th>
-=======
                     <th>Reason</th>
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
+                    <th>Attachment</th>
                     <th>Status</th>
                     <th class="text-center">Actions</th>
                 </tr>
             </thead>
             <tbody>
             <?php if(empty($rows)): ?>
-<<<<<<< HEAD
-                <tr><td colspan="8" class="text-center py-4 text-muted">No leave requests found</td></tr>
-=======
-                <tr><td colspan="7" class="text-center py-5 text-muted">
+                <tr><td colspan="8" class="text-center py-4 text-muted">
                     <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-25"></i>No leave requests found
                 </td></tr>
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
             <?php else: foreach($rows as $r): 
                 $days = (int)round((strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400) + 1;
             ?>
@@ -263,54 +245,26 @@ $userHasEmployeeId = !empty($u['employee_id']);
                             <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>Rejected</span>
                         <?php endif; ?>
                     </td>
-<<<<<<< HEAD
-                    <?php if($canApprove): ?>
                     <td class="action-btns">
-                        <?php if($r['status'] === 'pending'): ?>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Approve this leave?')">
-                            <?= csrf_input() ?>
-                            <input type="hidden" name="action" value="approved">
-                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                            <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
-                        </form>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Reject this leave?')">
-                            <?= csrf_input() ?>
-                            <input type="hidden" name="action" value="rejected">
-                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                            <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i></button>
-                        </form>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Cancel this leave?')">
-                            <?= csrf_input() ?>
-                            <input type="hidden" name="action" value="cancelled">
-                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                            <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-slash-circle"></i></button>
-                        </form>
-                        <?php else: ?>
-                        <span class="text-muted small">-</span>
-=======
-                    <td class="action-btns text-center">
-                        <button type="button" class="btn btn-sm btn-outline-primary" 
-                                data-bs-toggle="modal" data-bs-target="#viewLeaveModal<?= (int)$r['id'] ?>" 
-                                title="View Details">
-                            <i class="bi bi-eye"></i>
-                        </button>
                         <?php if($canApprove): ?>
                             <?php if($r['status'] === 'pending'): ?>
-                            <form method="post" class="d-inline" onsubmit="return confirm('Approve this leave request?')">
+                            <form method="post" class="d-inline" onsubmit="return confirm('Approve this leave?')">
                                 <?= csrf_input() ?>
                                 <input type="hidden" name="action" value="approved">
                                 <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                                <button type="submit" class="btn btn-sm btn-success" title="Approve">
-                                    <i class="bi bi-check-lg"></i>
-                                </button>
+                                <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
                             </form>
-                            <form method="post" class="d-inline" onsubmit="return confirm('Reject this leave request?')">
+                            <form method="post" class="d-inline" onsubmit="return confirm('Reject this leave?')">
                                 <?= csrf_input() ?>
                                 <input type="hidden" name="action" value="rejected">
                                 <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                                <button type="submit" class="btn btn-sm btn-danger" title="Reject">
-                                    <i class="bi bi-x-lg"></i>
-                                </button>
+                                <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i></button>
+                            </form>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Cancel this leave?')">
+                                <?= csrf_input() ?>
+                                <input type="hidden" name="action" value="cancelled">
+                                <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-slash-circle"></i></button>
                             </form>
                             <?php elseif($r['status'] === 'approved'): ?>
                             <form method="post" class="d-inline" onsubmit="return confirm('Revoke this approved leave?')">
@@ -322,16 +276,10 @@ $userHasEmployeeId = !empty($u['employee_id']);
                                 </button>
                             </form>
                             <?php else: ?>
-                            <form method="post" class="d-inline" onsubmit="return confirm('Re-approve this leave request?')">
-                                <?= csrf_input() ?>
-                                <input type="hidden" name="action" value="approved">
-                                <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
-                                <button type="submit" class="btn btn-sm btn-outline-success" title="Re-approve">
-                                    <i class="bi bi-check-circle"></i>
-                                </button>
-                            </form>
+                            <span class="text-muted small">-</span>
                             <?php endif; ?>
->>>>>>> a775bccaeb74f3c1866887b26428f0361533e786
+                        <?php else: ?>
+                            <span class="text-muted small">-</span>
                         <?php endif; ?>
                     </td>
                 </tr>
