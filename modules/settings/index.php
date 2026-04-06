@@ -348,7 +348,7 @@ try {
 
 // Determine active tab from query string (for post-redirect-get pattern)
 $activeTab = $_GET["tab"] ?? "company";
-$allowed = ["company","org","leaves","schedule","appearance","security","attendance"];
+$allowed = ["company","org","leaves","schedule","appearance","security","attendance","email","notifications","payroll","api"];
 if(!in_array($activeTab, $allowed)) $activeTab = "company";
 
 // Attendance settings - create table if needed
@@ -467,8 +467,20 @@ require_once __DIR__."/../../includes/nav.php";
                             <button class="nav-link <?= $activeTab==='appearance'?'active':'' ?>" data-tab="appearance" onclick="switchTab('appearance')" type="button">
                                 <i class="bi bi-palette"></i> Design Studio
                             </button>
-                            <button class="nav-link <?= $activeTab==='security'?'active':'' ?>" data-tab="security" onclick="switchTab('security')" type="button">
+<button class="nav-link <?= $activeTab==='security'?'active':'' ?>" data-tab="security" onclick="switchTab('security')" type="button">
                                 <i class="bi bi-shield-lock"></i> Security
+                            </button>
+                            <button class="nav-link <?= $activeTab==='email'?'active':'' ?>" data-tab="email" onclick="switchTab('email')" type="button">
+                                <i class="bi bi-envelope"></i> Email & SMS
+                            </button>
+                            <button class="nav-link <?= $activeTab==='notifications'?'active':'' ?>" data-tab="notifications" onclick="switchTab('notifications')" type="button">
+                                <i class="bi bi-bell"></i> Notifications
+                            </button>
+                            <button class="nav-link <?= $activeTab==='payroll'?'active':'' ?>" data-tab="payroll" onclick="switchTab('payroll')" type="button">
+                                <i class="bi bi-calculator"></i> Payroll
+                            </button>
+                            <button class="nav-link <?= $activeTab==='api'?'active':'' ?>" data-tab="api" onclick="switchTab('api')" type="button">
+                                <i class="bi bi-key"></i> Integrations
                             </button>
                             <hr class="my-2">
                             <a class="nav-link" href="holidays.php">
@@ -1013,6 +1025,26 @@ require_once __DIR__."/../../includes/nav.php";
                         </form>
                     </div>
                 </div>
+            </div>
+
+            <!-- ===== EMAIL SETTINGS ===== -->
+            <div id="tab-email" class="settings-section <?= $activeTab==='email'?'active':'' ?>">
+                <?php include 'email.php'; ?>
+            </div>
+
+            <!-- ===== NOTIFICATIONS ===== -->
+            <div id="tab-notifications" class="settings-section <?= $activeTab==='notifications'?'active':'' ?>">
+                <?php include 'notifications.php'; ?>
+            </div>
+
+            <!-- ===== PAYROLL ===== -->
+            <div id="tab-payroll" class="settings-section <?= $activeTab==='payroll'?'active':'' ?>">
+                <?php include 'payroll.php'; ?>
+            </div>
+
+            <!-- ===== API/INTEGRATIONS ===== -->
+            <div id="tab-api" class="settings-section <?= $activeTab==='api'?'active':'' ?>">
+                <?php include 'api.php'; ?>
             </div>
 
             </div><!-- /col-lg-9 -->
