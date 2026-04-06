@@ -221,4 +221,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-console.info('HRMS SaaS app.js loaded ✓');
+/* ───────────────────────────────────────────
+   12. Middle-click / wheel scroll fix polyfill
+─────────────────────────────────────────── */
+let scrollTimeout;
+document.addEventListener('wheel', (e) => {
+  if (e.ctrlKey || e.metaKey) return; // Ignore pinch/zoom
+  clearTimeout(scrollTimeout);
+  scrollTimeout = setTimeout(() => {
+    document.documentElement.style.scrollBehavior = 'smooth';
+  }, 100);
+}, { passive: true });
+
+console.info('HRMS SaaS app.js loaded ✓ - Scroll fixes active');

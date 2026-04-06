@@ -53,9 +53,14 @@ html {
   scrollbar-gutter: stable;
 }
 
-html,
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--topbar-h, 76px);
+  scrollbar-gutter: stable;
+}
+
 body {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 body {
@@ -290,7 +295,8 @@ h6,
 .main-content {
   background: transparent;
   padding-top: var(--topbar-h);
-  scroll-padding-top: calc(var(--topbar-h) + 0.65rem);
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--topbar-h) + 1rem);
 }
 
 .main-content > *:not(.top-bar):not(.page-header) {
@@ -1390,7 +1396,8 @@ body[data-ui-surface="contrast"] .modal-content {
 .table-responsive {
   width: 100%;
   overflow-x: auto !important;
-  overflow-y: hidden;
+  overflow-y: auto;
+  max-height: 65vh;
   border: 1px solid rgba(255, 255, 255, 0.64);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.38);
@@ -1398,6 +1405,7 @@ body[data-ui-surface="contrast"] .modal-content {
   scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: rgba(20, 33, 61, 0.4) transparent;
+  pointer-events: auto;
 }
 
 .table-responsive-wrapper:hover,
