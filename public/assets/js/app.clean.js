@@ -156,7 +156,7 @@ function initResponsiveTableWheelScroll() {
                 return;
             }
 
-            const primaryDelta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
+            const primaryDelta = event.deltaX;
             if (primaryDelta === 0) {
                 return;
             }
