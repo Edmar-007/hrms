@@ -151,13 +151,23 @@ function initResponsiveTableWheelScroll() {
                 return;
             }
 
-            const primaryDelta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+            const isHorizontalIntent = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+            if (!isHorizontalIntent) {
+                return;
+            }
+
+            const primaryDelta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
             if (primaryDelta === 0) {
                 return;
             }
 
+            const nextScrollLeft = wrapper.scrollLeft + primaryDelta;
+            if (nextScrollLeft < 0 || nextScrollLeft > maxScrollLeft) {
+                return;
+            }
+
             event.preventDefault();
-            wrapper.scrollLeft += primaryDelta;
+            wrapper.scrollLeft = nextScrollLeft;
         }, { passive: false });
     });
 }
