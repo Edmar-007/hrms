@@ -13,9 +13,16 @@ $u = $_SESSION['user'];
 $msg = '';
 $err = '';
 
-function company_active_admin_count($pdo, $cid) {
-    $st = $pdo->prepare("SELECT COUNT(*) c FROM users WHERE company_id = ? AND role = 'Admin' AND is_active = 1");
-    $st->execute([$cid]);
+// Check if users table has company_id column (SaaS mode)
+$hasSaasUsers = $pdo->query("SHOW COLUMNS FROM users LIKE 'company_id'")->fetch();
+
+function company_active_admin_count($pdo, $cid, $hasSaas) {
+    if ($hasSaas) {
+        $st = $pdo->prepare("SELECT COUNT(*) c FROM users WHERE company_id = ? AND role = 'Admin' AND is_active = 1");
+        $st->execute([$cid]);
+    } else {
+        $st = $pdo->query("SELECT COUNT(*) c FROM users WHERE role = 'Admin' AND is_active = 1");
+    }
     return (int)$st->fetch()['c'];
 }
 
@@ -30,8 +37,12 @@ if (is_post()) {
             $role = $_POST['role'] ?? 'Employee';
             $employeeId = (int)($_POST['employee_id'] ?? 0);
 
-            if (!v_email($email) || strlen($password) < 8 || !v_in($role, ['Admin','HR Officer','Manager','Employee'])) {
-                $err = 'Invalid user data.';
+            if (!v_email($email)) {
+                $err = 'Please enter a valid email address.';
+            } elseif (strlen($password) < 8) {
+                $err = 'Password must be at least 8 characters.';
+            } elseif (!v_in($role, ['Admin','HR Officer','Manager','Employee'])) {
+                $err = 'Invalid role selected.';
             } else {
                 $st = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
                 $st->execute([$email]);
@@ -39,8 +50,13 @@ if (is_post()) {
                     $err = 'Email already exists.';
                 } else {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
-                    $pdo->prepare("INSERT INTO users (company_id, employee_id, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, 1)")
-                        ->execute([$cid, ($employeeId > 0 ? $employeeId : null), $email, $hash, $role]);
+                    if ($hasSaasUsers) {
+                        $pdo->prepare("INSERT INTO users (company_id, employee_id, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, ?, 1)")
+                            ->execute([$cid, ($employeeId > 0 ? $employeeId : null), $email, $hash, $role]);
+                    } else {
+                        $pdo->prepare("INSERT INTO users (employee_id, email, password_hash, role, is_active) VALUES (?, ?, ?, ?, 1)")
+                            ->execute([($employeeId > 0 ? $employeeId : null), $email, $hash, $role]);
+                    }
                     log_activity('create', 'user', (int)$pdo->lastInsertId(), ['email' => $email, 'role' => $role]);
                     $msg = 'User account created.';
                 }
@@ -53,10 +69,15 @@ if (is_post()) {
             if ($id <= 0 || !v_in($role, ['Admin','HR Officer','Manager','Employee'])) {
                 $err = 'Invalid update request.';
             } else {
-                $st = $pdo->prepare("SELECT * FROM users WHERE id = ? AND company_id = ?");
-                $st->execute([$id, $cid]);
+                if ($hasSaasUsers) {
+                    $st = $pdo->prepare("SELECT * FROM users WHERE id = ? AND company_id = ?");
+                    $st->execute([$id, $cid]);
+                } else {
+                    $st = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+                    $st->execute([$id]);
+                }
                 $target = $st->fetch();
-                $activeAdmins = company_active_admin_count($pdo, $cid);
+                $activeAdmins = company_active_admin_count($pdo, $cid, $hasSaasUsers);
                 $targetIsActiveAdmin = ($target && $target['role'] === 'Admin' && (int)$target['is_active'] === 1);
                 $willRemainActiveAdmin = ($role === 'Admin' && $isActive === 1);
                 $wouldRemoveLastActiveAdmin = $targetIsActiveAdmin && !$willRemainActiveAdmin && $activeAdmins <= 1;
@@ -69,14 +90,24 @@ if (is_post()) {
                             $err = 'Password must be at least 8 characters.';
                         } else {
                             $hash = password_hash($password, PASSWORD_DEFAULT);
-                            $pdo->prepare("UPDATE users SET role = ?, is_active = ?, password_hash = ? WHERE id = ? AND company_id = ?")
-                                ->execute([$role, $isActive, $hash, $id, $cid]);
+                            if ($hasSaasUsers) {
+                                $pdo->prepare("UPDATE users SET role = ?, is_active = ?, password_hash = ? WHERE id = ? AND company_id = ?")
+                                    ->execute([$role, $isActive, $hash, $id, $cid]);
+                            } else {
+                                $pdo->prepare("UPDATE users SET role = ?, is_active = ?, password_hash = ? WHERE id = ?")
+                                    ->execute([$role, $isActive, $hash, $id]);
+                            }
                             log_activity('update', 'user', $id, ['role' => $role, 'is_active' => $isActive, 'password_changed' => true]);
                             $msg = 'User updated.';
                         }
                     } else {
-                        $pdo->prepare("UPDATE users SET role = ?, is_active = ? WHERE id = ? AND company_id = ?")
-                            ->execute([$role, $isActive, $id, $cid]);
+                        if ($hasSaasUsers) {
+                            $pdo->prepare("UPDATE users SET role = ?, is_active = ? WHERE id = ? AND company_id = ?")
+                                ->execute([$role, $isActive, $id, $cid]);
+                        } else {
+                            $pdo->prepare("UPDATE users SET role = ?, is_active = ? WHERE id = ?")
+                                ->execute([$role, $isActive, $id]);
+                        }
                         log_activity('update', 'user', $id, ['role' => $role, 'is_active' => $isActive]);
                         $msg = 'User updated.';
                     }
@@ -87,13 +118,22 @@ if (is_post()) {
             if ($id <= 0) $err = 'Invalid user.';
             elseif ($id === (int)$u['id']) $err = 'You cannot delete your own account.';
             else {
-                $st = $pdo->prepare("SELECT * FROM users WHERE id = ? AND company_id = ?");
-                $st->execute([$id, $cid]);
+                if ($hasSaasUsers) {
+                    $st = $pdo->prepare("SELECT * FROM users WHERE id = ? AND company_id = ?");
+                    $st->execute([$id, $cid]);
+                } else {
+                    $st = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+                    $st->execute([$id]);
+                }
                 $target = $st->fetch();
                 if (!$target) $err = 'User not found.';
-                elseif ($target['role'] === 'Admin' && (int)$target['is_active'] === 1 && company_active_admin_count($pdo, $cid) <= 1) $err = 'At least one admin account is required.';
+                elseif ($target['role'] === 'Admin' && (int)$target['is_active'] === 1 && company_active_admin_count($pdo, $cid, $hasSaasUsers) <= 1) $err = 'At least one admin account is required.';
                 else {
-                    $pdo->prepare("DELETE FROM users WHERE id = ? AND company_id = ?")->execute([$id, $cid]);
+                    if ($hasSaasUsers) {
+                        $pdo->prepare("DELETE FROM users WHERE id = ? AND company_id = ?")->execute([$id, $cid]);
+                    } else {
+                        $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$id]);
+                    }
                     log_activity('delete', 'user', $id, ['email' => $target['email']]);
                     $msg = 'User deleted.';
                 }
@@ -102,12 +142,25 @@ if (is_post()) {
     }
 }
 
-$employees = $pdo->prepare("SELECT id, first_name, last_name, employee_code FROM employees WHERE company_id = ? AND status = 'active' ORDER BY last_name, first_name");
-$employees->execute([$cid]);
+// Check if employees table has company_id column
+$hasEmpCompany = $pdo->query("SHOW COLUMNS FROM employees LIKE 'company_id'")->fetch();
+
+if ($hasEmpCompany) {
+    $employees = $pdo->prepare("SELECT id, first_name, last_name, employee_code FROM employees WHERE company_id = ? AND status = 'active' ORDER BY last_name, first_name");
+    $employees->execute([$cid]);
+} else {
+    $employees = $pdo->prepare("SELECT id, first_name, last_name, employee_code FROM employees WHERE status = 'active' ORDER BY last_name, first_name");
+    $employees->execute();
+}
 $employees = $employees->fetchAll();
 
-$users = $pdo->prepare("SELECT u.*, e.first_name, e.last_name, e.employee_code FROM users u LEFT JOIN employees e ON e.id = u.employee_id WHERE u.company_id = ? ORDER BY u.created_at DESC");
-$users->execute([$cid]);
+// Reuse $hasSaasUsers for users query
+if ($hasSaasUsers) {
+    $users = $pdo->prepare("SELECT u.*, e.first_name, e.last_name, e.employee_code FROM users u LEFT JOIN employees e ON e.id = u.employee_id WHERE u.company_id = ? ORDER BY u.created_at DESC");
+    $users->execute([$cid]);
+} else {
+    $users = $pdo->query("SELECT u.*, e.first_name, e.last_name, e.employee_code FROM users u LEFT JOIN employees e ON e.id = u.employee_id ORDER BY u.created_at DESC");
+}
 $users = $users->fetchAll();
 ?>
 <div class="page-header d-flex justify-content-between align-items-center">
@@ -118,65 +171,72 @@ $users = $users->fetchAll();
 <?php if($msg): ?><div class="alert alert-success"><?= e($msg) ?></div><?php endif; ?>
 <?php if($err): ?><div class="alert alert-danger"><?= e($err) ?></div><?php endif; ?>
 
-<div class="card">
+<div class="card table-card-flush">
     <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead><tr><th>Email</th><th>Employee</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
-            <tbody>
-            <?php foreach($users as $row): ?>
-                <tr>
-                    <td><?= e($row['email']) ?></td>
-                    <td><?= e(trim(($row['first_name'] ?? '').' '.($row['last_name'] ?? '')) ?: '-') ?> <?= !empty($row['employee_code']) ? '<small class="text-muted">('.e($row['employee_code']).')</small>' : '' ?></td>
-                    <td><span class="badge bg-info"><?= e($row['role']) ?></span></td>
-                    <td><?= (int)$row['is_active'] ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>' ?></td>
-                    <td><?= $row['last_login'] ? date('M j, Y h:i A', strtotime($row['last_login'])) : '-' ?></td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editUserModal<?= (int)$row['id'] ?>"><i class="bi bi-pencil"></i></button>
-                        <?php if((int)$row['id'] !== (int)$u['id']): ?>
-                        <form method="post" class="d-inline" onsubmit="return confirm('Delete this user?')">
-                            <?= csrf_input() ?>
-                            <input type="hidden" name="action" value="delete">
-                            <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
-                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
-                        </form>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-
-                <div class="modal fade" id="editUserModal<?= (int)$row['id'] ?>" tabindex="-1">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <form method="post">
+        <div class="table-responsive-wrapper">
+            <table class="table table-hover mb-0">
+                <thead><tr><th>Email</th><th>Employee</th><th>Role</th><th>Status</th><th>Last Login</th><th>Actions</th></tr></thead>
+                <tbody>
+                <?php foreach($users as $row): ?>
+                    <tr>
+                        <td><?= e($row['email']) ?></td>
+                        <td><?= e(trim(($row['first_name'] ?? '').' '.($row['last_name'] ?? '')) ?: '-') ?> <?= !empty($row['employee_code']) ? '<small class="text-muted">('.e($row['employee_code']).')</small>' : '' ?></td>
+                        <td><span class="badge bg-info"><?= e($row['role']) ?></span></td>
+                        <td><?= (int)$row['is_active'] ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>' ?></td>
+                        <td><?= $row['last_login'] ? date('M j, Y h:i A', strtotime($row['last_login'])) : '-' ?></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editUserModal<?= (int)$row['id'] ?>"><i class="bi bi-pencil"></i></button>
+                            <?php if((int)$row['id'] !== (int)$u['id']): ?>
+                            <form method="post" class="d-inline" onsubmit="return confirm('Delete this user?')">
                                 <?= csrf_input() ?>
-                                <input type="hidden" name="action" value="update">
+                                <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
-                                <div class="modal-header"><h5 class="modal-title">Edit User</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                                <div class="modal-body">
-                                    <div class="mb-2"><label class="form-label">Email</label><input class="form-control" value="<?= e($row['email']) ?>" disabled></div>
-                                    <div class="mb-2">
-                                        <label class="form-label">Role</label>
-                                        <select class="form-select" name="role" required>
-                                            <?php foreach(['Admin','HR Officer','Manager','Employee'] as $role): ?>
-                                            <option value="<?= $role ?>" <?= $row['role'] === $role ? 'selected' : '' ?>><?= $role ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" name="is_active" id="active<?= (int)$row['id'] ?>" <?= (int)$row['is_active'] ? 'checked' : '' ?>>
-                                        <label class="form-check-label" for="active<?= (int)$row['id'] ?>">Active</label>
-                                    </div>
-                                    <div><label class="form-label">New Password (optional)</label><input class="form-control" type="password" name="password" minlength="8"></div>
-                                </div>
-                                <div class="modal-footer"><button class="btn btn-primary">Save</button></div>
+                                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                             </form>
-                        </div>
-                    </div>
-                </div>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+
+<?php foreach($users as $row): ?>
+<div class="modal fade" id="editUserModal<?= (int)$row['id'] ?>" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                <?= csrf_input() ?>
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+                <div class="modal-header"><h5 class="modal-title">Edit User: <?= e($row['email']) ?></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label fw-semibold">Email</label><input class="form-control" value="<?= e($row['email']) ?>" disabled></div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Role</label>
+                        <select class="form-select" name="role" required>
+                            <?php foreach(['Admin','HR Officer','Manager','Employee'] as $role): ?>
+                            <option value="<?= $role ?>" <?= $row['role'] === $role ? 'selected' : '' ?>><?= $role ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="is_active" id="active<?= (int)$row['id'] ?>" <?= (int)$row['is_active'] ? 'checked' : '' ?>>
+                        <label class="form-check-label" for="active<?= (int)$row['id'] ?>">Account Active</label>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">New Password <span class="text-muted fw-normal">(leave blank to keep current)</span></label>
+                        <input class="form-control" type="password" name="password" minlength="8" placeholder="Min. 8 characters">
+                    </div>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Save Changes</button></div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endforeach; ?>
 
 <div class="modal fade" id="createUserModal" tabindex="-1">
     <div class="modal-dialog">

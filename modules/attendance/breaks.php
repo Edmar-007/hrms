@@ -108,9 +108,10 @@ if ($isAdmin) {
 </div>
 
 <?php if (isset($_GET['msg'])): ?>
+<?php $msg = $_GET['msg'] ?? ''; ?>
 <div class="alert alert-success alert-dismissible fade show">
     <i class="bi bi-check-circle me-2"></i>
-    <?= $_GET['msg'] === 'break_started' ? 'Break started!' : ($_GET['msg'] === 'break_ended' ? 'Break ended!' : 'Done!') ?>
+    <?= $msg === 'break_started' ? 'Break started!' : ($msg === 'break_ended' ? 'Break ended!' : 'Done!') ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>

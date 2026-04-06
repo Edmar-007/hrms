@@ -36,11 +36,11 @@ $graceBefore = max(0, (int)($settings['out_of_shift_grace_before_minutes'] ?? 60
 $graceAfter = max(0, (int)($settings['out_of_shift_grace_after_minutes'] ?? 60));
 
 // Try to parse as JSON first (new format)
-$qrParsed = @json_decode($code, true);
+$qrParsed = json_decode($code, true);
 $employeeCode = null;
 $employeeIdFromQr = null;
 
-if($qrParsed && isset($qrParsed['type']) && $qrParsed['type'] === 'hrms_employee') {
+if(json_last_error() === JSON_ERROR_NONE && $qrParsed && isset($qrParsed['type']) && $qrParsed['type'] === 'hrms_employee') {
     $employeeIdFromQr = intval($qrParsed['id'] ?? 0);
     $employeeCode = $qrParsed['code'] ?? null;
 } else {

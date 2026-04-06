@@ -2,6 +2,7 @@
 require_once __DIR__.'/../../config/db.php';
 require_once __DIR__.'/../../includes/auth.php';
 require_once __DIR__.'/../../includes/csrf.php';
+require_once __DIR__.'/leave-handler.php';
 require_once __DIR__.'/../../includes/header.php';
 require_once __DIR__.'/../../includes/nav.php';
 require_login();
@@ -9,6 +10,7 @@ require_login();
 $u = $_SESSION['user'];
 $canApprove = in_array($u['role'], ['Admin', 'HR Officer', 'Manager']);
 $actionFailed = false;
+$permissionDenied = false;
 
 // Check SaaS mode
 $hasSaas = $pdo->query("SHOW COLUMNS FROM leave_types LIKE 'company_id'")->fetch();
@@ -23,59 +25,14 @@ if(is_post() && verify_csrf()) {
             $permissionDenied = true;
             $actionFailed = true;
         } else {
-        // Fetch current leave request before updating
-        if($hasSaas && $cid) {
-            $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ? AND lr.company_id = ?");
-            $leaveReq->execute([$id, $cid]);
-        } else {
-            $leaveReq = $pdo->prepare("SELECT lr.*, lt.is_paid FROM leave_requests lr JOIN leave_types lt ON lt.id = lr.leave_type_id WHERE lr.id = ?");
-            $leaveReq->execute([$id]);
-        }
-        $leaveData = $leaveReq->fetch();
-
-        if($hasSaas && $cid) {
-            if ($action === 'cancelled') {
-                $st = $pdo->prepare("UPDATE leave_requests SET status='rejected', cancelled_at=NOW(), cancelled_by=? WHERE id=? AND company_id=?");
-                $st->execute([$u['id'], $id, $cid]);
-            } else {
-                $st = $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=? AND company_id=?");
-                $st->execute([$action, $u['id'], $id, $cid]);
+            // Use helper function for cleaner code
+            $result = process_leave_action($pdo, $id, $action, $u, $cid, $hasSaas);
+            if ($result['success'] && $result['data']) {
+                update_leave_balance($pdo, $result['data'], $action, $cid, $hasSaas);
+                send_leave_notification($pdo, $result['data'], $action);
+                log_activity($action, 'leave_request', $id, ['employee_id' => $result['data']['employee_id']]);
             }
-        } else {
-            $st = $pdo->prepare("UPDATE leave_requests SET status=?, approved_by=?, approved_at=NOW() WHERE id=?");
-            $st->execute([$action, $u['id'], $id]);
-        }
-
-        // Auto-update leave balance
-        if ($leaveData && $st->rowCount() > 0) {
-            $leaveDays = (int) ceil((strtotime($leaveData['end_date']) - strtotime($leaveData['start_date'])) / 86400) + 1;
-            $year = (int) date('Y', strtotime($leaveData['start_date']));
-            $empId = $leaveData['employee_id'];
-            $ltId  = $leaveData['leave_type_id'];
-            $prevStatus = $leaveData['status'];
-
-            if ($action === 'approved' && $prevStatus === 'pending') {
-                // Deduct days from leave balance
-                $pdo->prepare("UPDATE employee_leave_balance SET used = used + ? WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
-                    ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
-            } elseif ($action === 'rejected' && $prevStatus === 'approved') {
-                // Revert previously approved leave
-                $pdo->prepare("UPDATE employee_leave_balance SET used = GREATEST(0, used - ?) WHERE company_id = ? AND employee_id = ? AND leave_type_id = ? AND year = ?")
-                    ->execute([$leaveDays, $cid, $empId, $ltId, $year]);
-            }
-            if ($action === 'approved') {
-                $usr = $pdo->prepare("SELECT id FROM users WHERE employee_id = ? AND is_active = 1 LIMIT 1");
-                $usr->execute([$leaveData['employee_id']]);
-                if ($x = $usr->fetch()) notify((int)$x['id'], 'leave', 'Leave Approved', 'Your leave request has been approved.', '/hrms/modules/leaves/index.php');
-            } elseif ($action === 'rejected' || $action === 'cancelled') {
-                $usr = $pdo->prepare("SELECT id FROM users WHERE employee_id = ? AND is_active = 1 LIMIT 1");
-                $usr->execute([$leaveData['employee_id']]);
-                if ($x = $usr->fetch()) notify((int)$x['id'], 'leave', 'Leave Rejected/Cancelled', 'Your leave request was rejected or cancelled.', '/hrms/modules/leaves/index.php');
-            }
-            log_activity($action, 'leave_request', $id, ['employee_id' => $leaveData['employee_id']]);
-        }
-
-        header("Location: index.php?msg=$action"); exit;
+            header("Location: index.php?msg=$action"); exit;
         }
     } else {
         $actionFailed = true;
@@ -123,12 +80,15 @@ if($canApprove) {
     }
 }
 $userHasEmployeeId = !empty($u['employee_id']);
+// Allow Admin/HR to request on behalf of employees even if not linked
+$canRequestLeave = $userHasEmployeeId || $canApprove;
+$employees = $canApprove ? get_company_employees($pdo, $cid, $hasSaas) : [];
 ?>
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-calendar-check me-2"></i>Leave Requests</h4>
     <div class="d-flex gap-2">
         <a href="calendar.php" class="btn btn-outline-secondary"><i class="bi bi-calendar3 me-2"></i>Calendar</a>
-        <?php if($userHasEmployeeId): ?>
+        <?php if($canRequestLeave): ?>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
             <i class="bi bi-plus-lg me-2"></i>Request Leave
         </button>
@@ -148,16 +108,17 @@ $userHasEmployeeId = !empty($u['employee_id']);
 <?php endif; ?>
 
 <?php if(isset($_GET['msg']) || $actionFailed): ?>
-<div class="alert <?= $actionFailed || $_GET['msg'] === 'error' ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
-    <i class="bi bi-<?= $actionFailed || $_GET['msg'] === 'error' ? 'exclamation-circle' : 'check-circle' ?> me-2"></i>
+<?php $msgType = $_GET['msg'] ?? ''; ?>
+<div class="alert <?= $actionFailed || $msgType === 'error' ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
+    <i class="bi bi-<?= $actionFailed || $msgType === 'error' ? 'exclamation-circle' : 'check-circle' ?> me-2"></i>
     <?php 
     if($actionFailed) {
-        echo !empty($permissionDenied) ? 'You do not have permission to perform this action.' : 'Unable to process leave action.';
-    } elseif(($_GET['msg'] ?? '') === 'error') {
+        echo $permissionDenied ? 'You do not have permission to perform this action.' : 'Unable to process leave action.';
+    } elseif($msgType === 'error') {
         echo 'Unable to process leave request. Please ensure all fields are filled correctly.';
     } else {
         $msgs = ['added'=>'Leave request submitted!', 'approved'=>'Leave approved!', 'rejected'=>'Leave rejected!', 'cancelled' => 'Leave cancelled!'];
-        echo $msgs[$_GET['msg']] ?? 'Done!';
+        echo $msgs[$msgType] ?? 'Done!';
     }
     ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -202,7 +163,7 @@ $userHasEmployeeId = !empty($u['employee_id']);
                     <i class="bi bi-calendar-x fs-2 d-block mb-2 opacity-25"></i>No leave requests found
                 </td></tr>
             <?php else: foreach($rows as $r): 
-                $days = (int)round((strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400) + 1;
+                $days = calculate_leave_days($r['start_date'], $r['end_date']);
             ?>
                 <tr data-status="<?= e($r['status']) ?>"
                     data-search="<?= strtolower(e($r['first_name'].' '.$r['last_name'].' '.$r['leave_type'])) ?>">
@@ -291,7 +252,7 @@ $userHasEmployeeId = !empty($u['employee_id']);
 
 <!-- View Leave Modals -->
 <?php if(!empty($rows)): foreach($rows as $r): 
-    $days = (int)round((strtotime($r['end_date']) - strtotime($r['start_date'])) / 86400) + 1;
+    $days = calculate_leave_days($r['start_date'], $r['end_date']);
 ?>
 <div class="modal fade" id="viewLeaveModal<?= (int)$r['id'] ?>" tabindex="-1">
     <div class="modal-dialog">
@@ -364,6 +325,22 @@ $userHasEmployeeId = !empty($u['employee_id']);
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <?php if($canApprove && !empty($employees)): ?>
+                    <div class="mb-3">
+                        <label class="form-label">Employee</label>
+                        <select class="form-select" name="employee_id">
+                            <?php if($userHasEmployeeId): ?>
+                            <option value="">— My Leave Request —</option>
+                            <?php else: ?>
+                            <option value="">— Select Employee —</option>
+                            <?php endif; ?>
+                            <?php foreach($employees as $emp): ?>
+                            <option value="<?= $emp['id'] ?>"><?= e($emp['first_name'].' '.$emp['last_name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="text-muted">Select an employee to request leave on their behalf.</small>
+                    </div>
+                    <?php endif; ?>
                     <div class="mb-3">
                         <label class="form-label">Leave Type</label>
                         <select class="form-select" name="leave_type_id" required>
@@ -421,8 +398,10 @@ function filterLeave() {
 if (leaveSearch) leaveSearch.addEventListener('input',  filterLeave);
 if (leaveFilter) leaveFilter.addEventListener('change', filterLeave);
 
-// Bootstrap tooltips
-document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+// Bootstrap tooltips – deferred so Bootstrap JS (loaded in footer) is available
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
 </script>
 
 <?php require_once __DIR__.'/../../includes/footer.php'; ?>

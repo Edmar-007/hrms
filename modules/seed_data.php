@@ -12,7 +12,7 @@ $companyId = 1;
 if($hasSaas) {
     $check = $pdo->query("SELECT id FROM companies LIMIT 1")->fetch();
     if(!$check) {
-        $pdo->exec("INSERT INTO companies (id, name, slug, email, plan, max_employees) VALUES (1, 'Demo Company', 'demo', 'admin@hrms.local', 'professional', 100)");
+        $pdo->exec("INSERT INTO companies (id, name, slug, email) VALUES (1, 'Demo Company', 'demo', 'admin@hrms.local')");
         echo "✓ Created company\n";
     }
 }
@@ -240,18 +240,6 @@ echo "✓ Created $userCount additional user accounts\n";
 
 // SaaS-specific data
 if($hasSaas) {
-    try {
-        $planCheck = $pdo->query("SELECT id FROM subscription_plans LIMIT 1")->fetch();
-        if(!$planCheck) {
-            $pdo->exec("INSERT INTO subscription_plans (name, slug, price_monthly, price_yearly, max_employees, features) VALUES 
-                ('Free', 'free', 0, 0, 5, '{\"attendance\":true,\"leaves\":true,\"payroll\":false,\"reports\":false,\"qr_scanner\":false}'),
-                ('Starter', 'starter', 499, 4990, 25, '{\"attendance\":true,\"leaves\":true,\"payroll\":true,\"reports\":false,\"qr_scanner\":true}'),
-                ('Professional', 'professional', 999, 9990, 100, '{\"attendance\":true,\"leaves\":true,\"payroll\":true,\"reports\":true,\"qr_scanner\":true}'),
-                ('Enterprise', 'enterprise', 2499, 24990, 9999, '{\"attendance\":true,\"leaves\":true,\"payroll\":true,\"reports\":true,\"qr_scanner\":true,\"api\":true}')");
-            echo "✓ Added subscription plans\n";
-        }
-    } catch(Exception $e) {}
-    
     try {
         $pdo->exec("DELETE FROM notifications WHERE company_id = $companyId");
         $pdo->exec("INSERT INTO notifications (company_id, user_id, type, title, message, is_read, created_at) VALUES 

@@ -107,9 +107,10 @@ $availableEmployees = $available->fetchAll();
 </div>
 
 <?php if (isset($_GET['msg'])): ?>
+<?php $msg = $_GET['msg'] ?? ''; ?>
 <div class="alert alert-success alert-dismissible fade show" role="alert">
     <i class="bi bi-check-circle me-2"></i>
-    <?= $_GET['msg'] === 'assigned' ? 'Employee assigned successfully!' : ($_GET['msg'] === 'updated' ? 'Updated successfully!' : ($_GET['msg'] === 'removed' ? 'Assignment removed!' : '')) ?>
+    <?= $msg === 'assigned' ? 'Employee assigned successfully!' : ($msg === 'updated' ? 'Updated successfully!' : ($msg === 'removed' ? 'Assignment removed!' : '')) ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>

@@ -65,9 +65,10 @@ if($isAdmin) {
 <?php endif; ?>
 
 <?php if(isset($_GET['msg'])): ?>
+<?php $msg = $_GET['msg'] ?? ''; ?>
 <div class="alert alert-success alert-dismissible fade show">
     <i class="bi bi-check-circle me-2"></i>
-    <?= $_GET['msg'] === 'in' ? 'Time In recorded successfully!' : 'Time Out recorded successfully!' ?>
+    <?= $msg === 'in' ? 'Time In recorded successfully!' : 'Time Out recorded successfully!' ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>

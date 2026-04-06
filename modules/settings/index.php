@@ -6,8 +6,63 @@ require_login();
 require_role(["Admin","HR Officer"]);
 
 $pageTitle = "Settings";
-$company = company();
 $user = $_SESSION["user"];
+
+// Always load fresh company data from DB to get all fields (session only has subset)
+$cid = company_id() ?? 1;
+$companyStmt = $pdo->prepare("SELECT * FROM companies WHERE id = ?");
+$companyStmt->execute([$cid]);
+$company = $companyStmt->fetch() ?: (company() ?? []);
+
+$accentThemeOptions = [
+    "teal" => [
+        "label" => "Coastal Teal",
+        "hint" => "Balanced and modern with a bright accent.",
+        "colors" => ["#0f766e", "#14b8a6", "#f97316"]
+    ],
+    "indigo" => [
+        "label" => "Indigo Pulse",
+        "hint" => "Sharper and more executive for admin-heavy work.",
+        "colors" => ["#312e81", "#4f46e5", "#fb7185"]
+    ],
+    "sunset" => [
+        "label" => "Sunset Signal",
+        "hint" => "Warm and bold with a more editorial feel.",
+        "colors" => ["#9a3412", "#ea580c", "#fbbf24"]
+    ],
+    "emerald" => [
+        "label" => "Emerald Desk",
+        "hint" => "Fresh and energetic without being loud.",
+        "colors" => ["#065f46", "#047857", "#38bdf8"]
+    ],
+    "mono" => [
+        "label" => "Monochrome Slate",
+        "hint" => "Minimal and high-contrast for focused teams.",
+        "colors" => ["#111827", "#374151", "#9ca3af"]
+    ],
+];
+
+$surfaceStyleOptions = [
+    "glass" => ["label" => "Glass", "hint" => "Soft blur and layered panels."],
+    "solid" => ["label" => "Solid", "hint" => "Cleaner blocks with less blur."],
+    "contrast" => ["label" => "Contrast", "hint" => "Sharper cards for denser work."],
+];
+
+$sidebarStateOptions = [
+    "expanded" => ["label" => "Expanded", "hint" => "Open the full navigation by default."],
+    "collapsed" => ["label" => "Compact", "hint" => "Start with the smaller sidebar and remember user toggles."],
+];
+
+$sidebarColorOptions = [
+    "default" => ["label" => "Midnight", "colors" => ["#0f172a", "#1e293b"]],
+    "indigo" => ["label" => "Indigo", "colors" => ["#312e81", "#4338ca"]],
+    "teal" => ["label" => "Teal", "colors" => ["#134e4a", "#0d9488"]],
+    "rose" => ["label" => "Rose", "colors" => ["#881337", "#be123c"]],
+    "emerald" => ["label" => "Emerald", "colors" => ["#064e3b", "#059669"]],
+    "amber" => ["label" => "Amber", "colors" => ["#78350f", "#d97706"]],
+    "purple" => ["label" => "Purple", "colors" => ["#581c87", "#9333ea"]],
+    "blue" => ["label" => "Blue", "colors" => ["#1e3a5f", "#2563eb"]],
+];
 
 // Handle form submissions
 $success = $error = "";
@@ -41,7 +96,23 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
 
     if($action === "update_appearance") {
         $sidebarColor = $_POST["sidebar_color"] ?? "default";
+        $accentTheme = $_POST["accent_theme"] ?? "teal";
+        $surfaceStyle = $_POST["surface_style"] ?? "glass";
+        $sidebarDefaultState = $_POST["sidebar_default_state"] ?? "expanded";
         $logoUrl = trim($_POST["logo_url"] ?? "");
+
+        if(!isset($sidebarColorOptions[$sidebarColor])) {
+            $sidebarColor = "default";
+        }
+        if(!isset($accentThemeOptions[$accentTheme])) {
+            $accentTheme = "teal";
+        }
+        if(!isset($surfaceStyleOptions[$surfaceStyle])) {
+            $surfaceStyle = "glass";
+        }
+        if(!isset($sidebarStateOptions[$sidebarDefaultState])) {
+            $sidebarDefaultState = "expanded";
+        }
         
         // Handle logo upload
         if(!empty($_FILES["logo_file"]["name"])) {
@@ -64,7 +135,17 @@ if($_SERVER["REQUEST_METHOD"] === "POST" && verify_csrf()) {
             }
         }
         
-        $navSettings = json_encode(["sidebar_color" => $sidebarColor]);
+        $existingNavSettings = json_decode($company["nav_settings"] ?? "{}", true);
+        if(!is_array($existingNavSettings)) {
+            $existingNavSettings = [];
+        }
+
+        $navSettings = json_encode(array_merge($existingNavSettings, [
+            "sidebar_color" => $sidebarColor,
+            "accent_theme" => $accentTheme,
+            "surface_style" => $surfaceStyle,
+            "sidebar_default_state" => $sidebarDefaultState
+        ]));
         
         try {
             $pdo->prepare("UPDATE companies SET logo_url=?, nav_settings=? WHERE id=?")
@@ -265,97 +346,136 @@ try {
     error_log("Settings data load error: " . $e->getMessage());
 }
 
-// Subscription plan
-$plan = null;
-try {
-    $planStmt = $pdo->prepare("SELECT * FROM subscription_plans WHERE slug = ?");
-    $planStmt->execute([$company["plan"] ?? "free"]);
-    $plan = $planStmt->fetch();
-} catch (PDOException $e) {
-    // Table may not exist
-}
-
 // Determine active tab from query string (for post-redirect-get pattern)
 $activeTab = $_GET["tab"] ?? "company";
-$allowed = ["company","org","leaves","schedule","appearance","security","subscription","attendance"];
+$allowed = ["company","org","leaves","schedule","appearance","security","attendance"];
 if(!in_array($activeTab, $allowed)) $activeTab = "company";
 
-$attSet = $pdo->prepare("SELECT * FROM attendance_settings WHERE company_id = ? LIMIT 1");
-$attSet->execute([company_id()]);
-$attSet = $attSet->fetch() ?: [
+// Attendance settings - create table if needed
+try {
+    $pdo->query("SELECT 1 FROM attendance_settings LIMIT 1");
+} catch (PDOException $e) {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS attendance_settings (
+        company_id INT PRIMARY KEY,
+        grace_period_minutes INT DEFAULT 10,
+        duplicate_scan_seconds INT DEFAULT 3,
+        require_action_sequence TINYINT DEFAULT 1,
+        gps_capture_enabled TINYINT DEFAULT 0,
+        out_of_shift_grace_before_minutes INT DEFAULT 60,
+        out_of_shift_grace_after_minutes INT DEFAULT 60
+    )");
+}
+
+$attSet = [];
+try {
+    $stmt = $pdo->prepare("SELECT * FROM attendance_settings WHERE company_id = ? LIMIT 1");
+    $stmt->execute([company_id()]);
+    $attSet = $stmt->fetch() ?: [];
+} catch (PDOException $e) {}
+
+$attSet = array_merge([
     "grace_period_minutes" => 10,
     "duplicate_scan_seconds" => 3,
     "require_action_sequence" => 1,
     "gps_capture_enabled" => 0,
     "out_of_shift_grace_before_minutes" => 60,
     "out_of_shift_grace_after_minutes" => 60
-];
+], $attSet ?: []);
+
+$companyNavSettings = json_decode($company["nav_settings"] ?? "{}", true);
+if(!is_array($companyNavSettings)) {
+    $companyNavSettings = [];
+}
+
+$appearanceSettings = array_merge([
+    "sidebar_color" => "default",
+    "accent_theme" => "teal",
+    "surface_style" => "glass",
+    "sidebar_default_state" => "expanded"
+], $companyNavSettings);
+
+$currentLogo = $company["logo_url"] ?? "";
 
 require_once __DIR__."/../../includes/header.php";
 require_once __DIR__."/../../includes/nav.php";
 ?>
 
-<div class="main-content">
-<div class="container-fluid py-4">
-
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h1 class="h3 mb-0"><i class="bi bi-gear me-2"></i>Settings</h1>
-            <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0">
-                <li class="breadcrumb-item"><a href="../dashboard.php">Dashboard</a></li>
-                <li class="breadcrumb-item active">Settings</li>
-            </ol></nav>
-        </div>
-    </div>
+<div class="container-fluid pt-2 pb-4">
+    <div class="settings-shell">
+        <section class="settings-hero">
+            <div class="settings-hero__copy">
+                <span class="settings-hero__eyebrow"><i class="bi bi-sliders"></i> Admin Studio</span>
+                <h1>Settings</h1>
+                <p>Control your workspace identity, HR policies, security, and design system from one place. The design studio below now changes the live shell colors, surfaces, and sidebar behavior across the site.</p>
+            </div>
+            <div class="settings-stat">
+                <span class="settings-stat__label">Active Staff</span>
+                <strong class="settings-stat__value"><?= number_format((int)$empCount) ?></strong>
+                <span class="settings-stat__meta">Employees currently active in this workspace.</span>
+            </div>
+            <div class="settings-stat">
+                <span class="settings-stat__label">Structure</span>
+                <strong class="settings-stat__value"><?= number_format(count($departments) + count($positions)) ?></strong>
+                <span class="settings-stat__meta"><?= number_format(count($departments)) ?> departments and <?= number_format(count($positions)) ?> positions.</span>
+            </div>
+            <div class="settings-stat">
+                <span class="settings-stat__label">Brand Mode</span>
+                <strong class="settings-stat__value"><?= e(ucfirst($appearanceSettings["accent_theme"])) ?></strong>
+                <span class="settings-stat__meta"><?= e(ucfirst($appearanceSettings["surface_style"])) ?> surface with <?= e($appearanceSettings["sidebar_default_state"] === "collapsed" ? "compact" : "expanded") ?> nav.</span>
+            </div>
+        </section>
 
     <?php if($success): ?>
     <div class="alert alert-success alert-dismissible fade show">
-        <i class="bi bi-check-circle-fill me-2"></i><?= htmlspecialchars($success) ?>
+        <i class="bi bi-check-circle-fill me-2"></i><?= e($success) ?>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     <?php endif; ?>
-    <?php if($error): ?>
-    <div class="alert alert-danger alert-dismissible fade show">
-        <i class="bi bi-exclamation-circle-fill me-2"></i><?= htmlspecialchars($error) ?>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    <?php endif; ?>
+        <?php if($error): ?>
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="bi bi-exclamation-circle-fill me-2"></i><?= e($error) ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        <?php endif; ?>
 
-    <div class="row g-4">
+        <div class="row g-4">
         <!-- Sidebar Nav Tabs -->
         <div class="col-lg-3">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-2">
-                    <nav class="settings-tabs nav flex-column" id="settingsTabs">
-                        <button class="nav-link <?= $activeTab==='company'?'active':'' ?>" data-tab="company" onclick="switchTab('company')">
-                            <i class="bi bi-building"></i> Company Info
-                        </button>
-                        <button class="nav-link <?= $activeTab==='org'?'active':'' ?>" data-tab="org" onclick="switchTab('org')">
-                            <i class="bi bi-diagram-3"></i> Organization
-                        </button>
-                        <button class="nav-link <?= $activeTab==='attendance'?'active':'' ?>" data-tab="attendance" onclick="switchTab('attendance')">
-                            <i class="bi bi-shield-check"></i> Attendance Policy
-                        </button>
-                        <button class="nav-link <?= $activeTab==='leaves'?'active':'' ?>" data-tab="leaves" onclick="switchTab('leaves')">
-                            <i class="bi bi-calendar-week"></i> Leave Types
-                        </button>
-                        <button class="nav-link <?= $activeTab==='schedule'?'active':'' ?>" data-tab="schedule" onclick="switchTab('schedule')">
-                            <i class="bi bi-clock-history"></i> Work Schedule
-                        </button>
-                        <button class="nav-link <?= $activeTab==='appearance'?'active':'' ?>" data-tab="appearance" onclick="switchTab('appearance')">
-                            <i class="bi bi-palette"></i> Appearance
-                        </button>
-                        <button class="nav-link <?= $activeTab==='security'?'active':'' ?>" data-tab="security" onclick="switchTab('security')">
-                            <i class="bi bi-shield-lock"></i> Security
-                        </button>
-                        <hr class="my-2">
-                        <button class="nav-link <?= $activeTab==='subscription'?'active':'' ?>" data-tab="subscription" onclick="switchTab('subscription')">
-                            <i class="bi bi-award"></i> Subscription
-                        </button>
-                        <a class="nav-link" href="holidays.php">
-                            <i class="bi bi-calendar-event"></i> Holidays
-                        </a>
-                    </nav>
+            <div class="settings-sticky-nav">
+                <div class="card border-0 shadow-sm settings-nav-card">
+                    <div class="card-body">
+                        <div class="settings-nav-intro">
+                            <h2>Workspace controls</h2>
+                            <p>Switch between company data, HR rules, design controls, and security without leaving the page.</p>
+                        </div>
+                        <nav class="settings-tabs nav flex-column" id="settingsTabs">
+                            <button class="nav-link <?= $activeTab==='company'?'active':'' ?>" data-tab="company" onclick="switchTab('company')" type="button">
+                                <i class="bi bi-building"></i> Company Info
+                            </button>
+                            <button class="nav-link <?= $activeTab==='org'?'active':'' ?>" data-tab="org" onclick="switchTab('org')" type="button">
+                                <i class="bi bi-diagram-3"></i> Organization
+                            </button>
+                            <button class="nav-link <?= $activeTab==='attendance'?'active':'' ?>" data-tab="attendance" onclick="switchTab('attendance')" type="button">
+                                <i class="bi bi-shield-check"></i> Attendance Policy
+                            </button>
+                            <button class="nav-link <?= $activeTab==='leaves'?'active':'' ?>" data-tab="leaves" onclick="switchTab('leaves')" type="button">
+                                <i class="bi bi-calendar-week"></i> Leave Types
+                            </button>
+                            <button class="nav-link <?= $activeTab==='schedule'?'active':'' ?>" data-tab="schedule" onclick="switchTab('schedule')" type="button">
+                                <i class="bi bi-clock-history"></i> Work Schedule
+                            </button>
+                            <button class="nav-link <?= $activeTab==='appearance'?'active':'' ?>" data-tab="appearance" onclick="switchTab('appearance')" type="button">
+                                <i class="bi bi-palette"></i> Design Studio
+                            </button>
+                            <button class="nav-link <?= $activeTab==='security'?'active':'' ?>" data-tab="security" onclick="switchTab('security')" type="button">
+                                <i class="bi bi-shield-lock"></i> Security
+                            </button>
+                            <hr class="my-2">
+                            <a class="nav-link" href="holidays.php">
+                                <i class="bi bi-calendar-event"></i> Holidays
+                            </a>
+                        </nav>
+                    </div>
                 </div>
             </div>
         </div>
@@ -374,11 +494,11 @@ require_once __DIR__."/../../includes/nav.php";
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label">Company Name <span class="text-danger">*</span></label>
-                                    <input type="text" name="company_name" class="form-control" value="<?= htmlspecialchars($company["name"]) ?>" required>
+                                    <input type="text" name="company_name" class="form-control" value="<?= e($company["name"] ?? "") ?>" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Email <span class="text-danger">*</span></label>
-                                    <input type="email" name="company_email" class="form-control" value="<?= htmlspecialchars($company["email"]) ?>" required>
+                                    <input type="email" name="company_email" class="form-control" value="<?= e($company["email"] ?? "") ?>" required>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label">Phone</label>
@@ -475,11 +595,11 @@ require_once __DIR__."/../../includes/nav.php";
                                 <ul class="list-group list-group-flush">
                                 <?php foreach($departments as $d): ?>
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span><i class="bi bi-folder2 text-primary me-2"></i><?= htmlspecialchars($d["name"]) ?></span>
+                                    <span><i class="bi bi-folder2 text-primary me-2"></i><?= e($d["name"] ?? "") ?></span>
                                     <div class="d-flex gap-1">
                                         <button class="btn btn-sm btn-outline-info btn-edit-dept"
                                                 data-id="<?= (int)$d['id'] ?>"
-                                                data-name="<?= htmlspecialchars($d['name'], ENT_QUOTES) ?>"
+                                                data-name="<?= e($d['name']) ?>"
                                                 title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="POST" class="d-inline" onsubmit="return confirm('Delete department?')">
                                             <?= csrf_input() ?>
@@ -511,11 +631,11 @@ require_once __DIR__."/../../includes/nav.php";
                                 <ul class="list-group list-group-flush">
                                 <?php foreach($positions as $p): ?>
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span><i class="bi bi-briefcase text-success me-2"></i><?= htmlspecialchars($p["name"]) ?></span>
+                                    <span><i class="bi bi-briefcase text-success me-2"></i><?= e($p["name"] ?? "") ?></span>
                                     <div class="d-flex gap-1">
                                         <button class="btn btn-sm btn-outline-info btn-edit-pos"
                                                 data-id="<?= (int)$p['id'] ?>"
-                                                data-name="<?= htmlspecialchars($p['name'], ENT_QUOTES) ?>"
+                                                data-name="<?= e($p['name']) ?>"
                                                 title="Edit"><i class="bi bi-pencil"></i></button>
                                         <form method="POST" class="d-inline" onsubmit="return confirm('Delete position?')">
                                             <?= csrf_input() ?>
@@ -560,7 +680,7 @@ require_once __DIR__."/../../includes/nav.php";
                             <tr><td colspan="4" class="text-center py-4 text-muted">No leave types defined yet</td></tr>
                             <?php else: foreach($leaveTypes as $lt): ?>
                             <tr>
-                                <td><i class="bi bi-calendar2-check text-primary me-2"></i><?= htmlspecialchars($lt["name"]) ?></td>
+                                <td><i class="bi bi-calendar2-check text-primary me-2"></i><?= e($lt["name"] ?? "") ?></td>
                                 <td><span class="badge bg-info bg-opacity-75 text-dark"><?= (int)$lt["days_allowed"] ?> days</span></td>
                                 <td>
                                     <?php if($lt["is_paid"]): ?>
@@ -572,7 +692,7 @@ require_once __DIR__."/../../includes/nav.php";
                                 <td class="action-btns text-center">
                                     <button class="btn btn-sm btn-outline-info btn-edit-lt"
                                             data-id="<?= (int)$lt['id'] ?>"
-                                            data-name="<?= htmlspecialchars($lt['name'], ENT_QUOTES) ?>"
+                                            data-name="<?= e($lt['name']) ?>"
                                             data-days="<?= (int)$lt['days_allowed'] ?>"
                                             data-paid="<?= (int)$lt['is_paid'] ?>"><i class="bi bi-pencil"></i></button>
                                     <form method="POST" class="d-inline" onsubmit="return confirm('Delete this leave type?')">
@@ -599,8 +719,8 @@ require_once __DIR__."/../../includes/nav.php";
                             <?= csrf_input() ?>
                             <input type="hidden" name="action" value="update_company">
                             <!-- Pass company fields through as hidden to preserve them -->
-                            <input type="hidden" name="company_name"    value="<?= htmlspecialchars($company["name"]) ?>">
-                            <input type="hidden" name="company_email"   value="<?= htmlspecialchars($company["email"]) ?>">
+                            <input type="hidden" name="company_name"    value="<?= e($company["name"] ?? "") ?>">
+                            <input type="hidden" name="company_email"   value="<?= e($company["email"] ?? "") ?>">
                             <input type="hidden" name="company_phone"   value="<?= htmlspecialchars($company["phone"] ?? "") ?>">
                             <input type="hidden" name="company_address" value="<?= htmlspecialchars($company["address"] ?? "") ?>">
                             <input type="hidden" name="timezone"  value="<?= htmlspecialchars($company["timezone"] ?? "Asia/Manila") ?>">
@@ -646,103 +766,217 @@ require_once __DIR__."/../../includes/nav.php";
             <!-- ===== APPEARANCE ===== -->
             <div id="tab-appearance" class="settings-section <?= $activeTab==='appearance'?'active':'' ?>">
                 <div class="card border-0 shadow-sm mb-4">
-                    <div class="card-header"><i class="bi bi-palette me-2"></i>Appearance &amp; Display</div>
+                    <div class="card-header"><i class="bi bi-stars me-2"></i>Display Mode</div>
                     <div class="card-body">
-                        <div class="row g-4">
-                            <div class="col-md-6">
-                                <h6 class="fw-bold mb-3">Theme</h6>
-                                <div class="d-flex gap-3">
-                                    <button class="theme-preview-btn <?= ($user['theme']??'light')==='light'?'active':'' ?>"
-                                            onclick="applyTheme('light')" id="btnLight">
-                                        <div class="preview-card light-preview">
-                                            <div class="preview-bar"></div>
-                                            <div class="preview-content"></div>
-                                        </div>
-                                        <div class="mt-2 text-center fw-semibold"><i class="bi bi-sun me-1"></i>Light</div>
-                                    </button>
-                                    <button class="theme-preview-btn <?= ($user['theme']??'light')==='dark'?'active':'' ?>"
-                                            onclick="applyTheme('dark')" id="btnDark">
-                                        <div class="preview-card dark-preview">
-                                            <div class="preview-bar"></div>
-                                            <div class="preview-content"></div>
-                                        </div>
-                                        <div class="mt-2 text-center fw-semibold"><i class="bi bi-moon me-1"></i>Dark</div>
-                                    </button>
+                        <div class="row g-4 align-items-start">
+                            <div class="col-lg-7">
+                                <div class="design-panel">
+                                    <div class="design-panel__header">
+                                        <h6>Your personal theme</h6>
+                                        <p>This changes light or dark mode for your account only.</p>
+                                    </div>
+                                    <div class="theme-preview-grid">
+                                        <button class="theme-preview-btn <?= ($user['theme']??'light')==='light'?'active':'' ?>" onclick="applyTheme('light')" id="btnLight" type="button">
+                                            <div class="preview-card light-preview">
+                                                <div class="preview-bar"></div>
+                                                <div class="preview-content"></div>
+                                            </div>
+                                            <div class="fw-semibold"><i class="bi bi-sun me-1"></i>Light workspace</div>
+                                        </button>
+                                        <button class="theme-preview-btn <?= ($user['theme']??'light')==='dark'?'active':'' ?>" onclick="applyTheme('dark')" id="btnDark" type="button">
+                                            <div class="preview-card dark-preview">
+                                                <div class="preview-bar"></div>
+                                                <div class="preview-content"></div>
+                                            </div>
+                                            <div class="fw-semibold"><i class="bi bi-moon me-1"></i>Dark workspace</div>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="col-md-6">
-                                <h6 class="fw-bold mb-3">Current Settings</h6>
-                                <table class="table table-sm">
-                                    <tr><td class="text-muted">Active Theme</td><td><span id="currentTheme" class="badge bg-primary"><?= ucfirst($user['theme']??'light') ?></span></td></tr>
-                                    <tr><td class="text-muted">Currency</td><td><?= htmlspecialchars($company["currency"] ?? "PHP") ?></td></tr>
-                                    <tr><td class="text-muted">Timezone</td><td><?= htmlspecialchars($company["timezone"] ?? "Asia/Manila") ?></td></tr>
-                                </table>
-                                <small class="text-muted">Theme is saved per user account. Currency and timezone are set in Company Info.</small>
+                            <div class="col-lg-5">
+                                <div class="design-panel h-100">
+                                    <div class="design-panel__header">
+                                        <h6>Current workspace profile</h6>
+                                        <p>These values help you keep the brand system consistent.</p>
+                                    </div>
+                                    <table class="table table-sm settings-mini-table mb-3">
+                                        <tr><td class="text-muted">Active Theme</td><td><span id="currentTheme" class="badge bg-primary"><?= ucfirst($user['theme']??'light') ?></span></td></tr>
+                                        <tr><td class="text-muted">Accent Theme</td><td><?= e($accentThemeOptions[$appearanceSettings["accent_theme"]]["label"] ?? ucfirst($appearanceSettings["accent_theme"])) ?></td></tr>
+                                        <tr><td class="text-muted">Surface Style</td><td><?= e($surfaceStyleOptions[$appearanceSettings["surface_style"]]["label"] ?? ucfirst($appearanceSettings["surface_style"])) ?></td></tr>
+                                        <tr><td class="text-muted">Default Nav</td><td><?= e($sidebarStateOptions[$appearanceSettings["sidebar_default_state"]]["label"] ?? ucfirst($appearanceSettings["sidebar_default_state"])) ?></td></tr>
+                                    </table>
+                                    <div class="settings-note">
+                                        <strong>Note:</strong> the compact sidebar setting becomes the default first view, and each user can still expand or collapse it later from the top bar.
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Company Logo & Navbar Customization -->
-                <div class="card border-0 shadow-sm">
-                    <div class="card-header"><i class="bi bi-image me-2"></i>Branding &amp; Navigation</div>
-                    <div class="card-body">
-                        <form method="POST" action="?tab=appearance" enctype="multipart/form-data">
-                            <?= csrf_input() ?>
-                            <input type="hidden" name="action" value="update_appearance">
-                            
-                            <div class="row g-4">
-                                <div class="col-md-6">
-                                    <h6 class="fw-bold mb-3">Company Logo</h6>
-                                    <?php 
-                                    $currentLogo = $company['logo_url'] ?? '';
-                                    if($currentLogo): ?>
-                                    <div class="mb-3 p-3 bg-light rounded text-center">
-                                        <img src="<?= e($currentLogo) ?>" alt="Current Logo" style="max-height:60px;max-width:200px;">
-                                        <div class="mt-2 small text-muted">Current logo</div>
-                                    </div>
-                                    <?php endif; ?>
-                                    <div class="mb-3">
-                                        <label class="form-label">Upload New Logo</label>
-                                        <input type="file" name="logo_file" class="form-control" accept="image/jpeg,image/png,image/gif,image/svg+xml">
-                                        <small class="text-muted">Max 2MB. JPG, PNG, GIF, or SVG.</small>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">Or Logo URL</label>
-                                        <input type="url" name="logo_url" class="form-control" value="<?= e($currentLogo) ?>" placeholder="https://example.com/logo.png">
-                                    </div>
+                <div class="design-studio-grid">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header"><i class="bi bi-palette2 me-2"></i>Branding &amp; Layout Controls</div>
+                        <div class="card-body">
+                            <form method="POST" action="?tab=appearance" enctype="multipart/form-data">
+                                <?= csrf_input() ?>
+                                <input type="hidden" name="action" value="update_appearance">
+
+                                <div class="design-stack">
+                                    <section class="design-panel">
+                                        <div class="design-panel__header">
+                                            <h6>Brand identity</h6>
+                                            <p>Update the logo and keep the workspace recognizable across the sidebar and auth pages.</p>
+                                        </div>
+                                        <div class="logo-preview mb-3">
+                                            <?php if($currentLogo): ?>
+                                                <img src="<?= e($currentLogo) ?>" alt="<?= e($company["name"] ?? "Company logo") ?>">
+                                            <?php else: ?>
+                                                <span class="logo-preview__placeholder"><i class="bi bi-building"></i></span>
+                                            <?php endif; ?>
+                                            <div>
+                                                <strong class="d-block"><?= e($company["name"] ?? "Your company") ?></strong>
+                                                <span class="text-muted d-block small">Current logo shown in the sidebar and public auth screens.</span>
+                                            </div>
+                                        </div>
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label">Upload Logo</label>
+                                                <input type="file" name="logo_file" class="form-control" accept="image/jpeg,image/png,image/gif,image/svg+xml">
+                                                <small class="text-muted">Max 2MB. JPG, PNG, GIF, or SVG.</small>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Logo URL</label>
+                                                <input type="url" name="logo_url" class="form-control" value="<?= e($currentLogo) ?>" placeholder="https://example.com/logo.png">
+                                                <small class="text-muted">Leave blank if you only want to upload a local file.</small>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section class="design-panel">
+                                        <div class="design-panel__header">
+                                            <h6>Accent palette</h6>
+                                            <p>Pick the main visual direction for buttons, highlights, and shell details.</p>
+                                        </div>
+                                        <div class="design-option-grid">
+                                            <?php foreach($accentThemeOptions as $key => $option): ?>
+                                            <label class="design-option <?= $appearanceSettings["accent_theme"] === $key ? "is-active" : "" ?>">
+                                                <input type="radio" name="accent_theme" value="<?= e($key) ?>" <?= $appearanceSettings["accent_theme"] === $key ? "checked" : "" ?>>
+                                                <div class="design-option__swatches">
+                                                    <?php foreach($option["colors"] as $color): ?>
+                                                    <span class="design-option__swatch" style="background:<?= e($color) ?>"></span>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                                <span class="design-option__label"><?= e($option["label"]) ?></span>
+                                                <span class="design-option__hint"><?= e($option["hint"]) ?></span>
+                                            </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </section>
+
+                                    <section class="design-panel">
+                                        <div class="design-panel__header">
+                                            <h6>Surface style</h6>
+                                            <p>Choose how soft or crisp the cards, menus, and top bar should feel.</p>
+                                        </div>
+                                        <div class="design-option-grid">
+                                            <?php foreach($surfaceStyleOptions as $key => $option): ?>
+                                            <label class="design-option <?= $appearanceSettings["surface_style"] === $key ? "is-active" : "" ?>">
+                                                <input type="radio" name="surface_style" value="<?= e($key) ?>" <?= $appearanceSettings["surface_style"] === $key ? "checked" : "" ?>>
+                                                <div class="design-option__swatches">
+                                                    <span class="design-option__swatch" style="background:<?= $key === 'glass' ? 'linear-gradient(135deg, rgba(255,255,255,0.86), rgba(15,118,110,0.18))' : ($key === 'solid' ? 'linear-gradient(135deg, #fff7ed, #fde68a)' : 'linear-gradient(135deg, #ffffff, #dbeafe)') ?>"></span>
+                                                </div>
+                                                <span class="design-option__label"><?= e($option["label"]) ?></span>
+                                                <span class="design-option__hint"><?= e($option["hint"]) ?></span>
+                                            </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </section>
+
+                                    <section class="design-panel">
+                                        <div class="design-panel__header">
+                                            <h6>Navigation behavior</h6>
+                                            <p>Choose the default sidebar size and the color of the navigation rail.</p>
+                                        </div>
+                                        <div class="design-option-grid mb-3">
+                                            <?php foreach($sidebarStateOptions as $key => $option): ?>
+                                            <label class="design-option <?= $appearanceSettings["sidebar_default_state"] === $key ? "is-active" : "" ?>">
+                                                <input type="radio" name="sidebar_default_state" value="<?= e($key) ?>" <?= $appearanceSettings["sidebar_default_state"] === $key ? "checked" : "" ?>>
+                                                <span class="design-option__label"><?= e($option["label"]) ?></span>
+                                                <span class="design-option__hint"><?= e($option["hint"]) ?></span>
+                                            </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <div class="design-option-grid">
+                                            <?php foreach($sidebarColorOptions as $key => $option): ?>
+                                            <label class="sidebar-color-option <?= $appearanceSettings["sidebar_color"] === $key ? "selected" : "" ?>">
+                                                <input type="radio" name="sidebar_color" value="<?= e($key) ?>" <?= $appearanceSettings["sidebar_color"] === $key ? "checked" : "" ?> class="d-none">
+                                                <div class="color-preview" style="background:linear-gradient(135deg, <?= e($option["colors"][0]) ?>, <?= e($option["colors"][1]) ?>);" title="<?= e($option["label"]) ?>"></div>
+                                                <small><?= e($option["label"]) ?></small>
+                                            </label>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </section>
                                 </div>
-                                <div class="col-md-6">
-                                    <h6 class="fw-bold mb-3">Sidebar Color</h6>
-                                    <?php 
-                                    $navSettings = json_decode($company['nav_settings'] ?? '{}', true);
-                                    $currentSidebarColor = $navSettings['sidebar_color'] ?? 'default';
-                                    $sidebarColors = [
-                                        'default' => ['label' => 'Default (Dark)', 'colors' => ['#0f172a', '#1e293b']],
-                                        'indigo' => ['label' => 'Indigo', 'colors' => ['#312e81', '#4338ca']],
-                                        'teal' => ['label' => 'Teal', 'colors' => ['#134e4a', '#0d9488']],
-                                        'rose' => ['label' => 'Rose', 'colors' => ['#881337', '#be123c']],
-                                        'emerald' => ['label' => 'Emerald', 'colors' => ['#064e3b', '#059669']],
-                                        'amber' => ['label' => 'Amber', 'colors' => ['#78350f', '#d97706']],
-                                        'purple' => ['label' => 'Purple', 'colors' => ['#581c87', '#9333ea']],
-                                        'blue' => ['label' => 'Blue', 'colors' => ['#1e3a5f', '#2563eb']],
-                                    ];
-                                    ?>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        <?php foreach($sidebarColors as $key => $data): ?>
-                                        <label class="sidebar-color-option <?= $currentSidebarColor === $key ? 'selected' : '' ?>">
-                                            <input type="radio" name="sidebar_color" value="<?= $key ?>" <?= $currentSidebarColor === $key ? 'checked' : '' ?> class="d-none">
-                                            <div class="color-preview" style="background:linear-gradient(135deg, <?= $data['colors'][0] ?>, <?= $data['colors'][1] ?>);" title="<?= $data['label'] ?>"></div>
-                                            <small><?= $data['label'] ?></small>
-                                        </label>
-                                        <?php endforeach; ?>
+
+                                <hr class="my-4">
+                                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-2"></i>Save Design Studio Changes</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="design-stack">
+                        <div class="design-preview">
+                            <span class="design-preview__badge"><i class="bi bi-eye"></i> Live direction</span>
+                            <div>
+                                <h4><?= e($company["name"] ?? "Your workspace") ?></h4>
+                                <p><?= e($accentThemeOptions[$appearanceSettings["accent_theme"]]["label"] ?? ucfirst($appearanceSettings["accent_theme"])) ?> accent, <?= e($surfaceStyleOptions[$appearanceSettings["surface_style"]]["label"] ?? ucfirst($appearanceSettings["surface_style"])) ?> surfaces, and a <?= e($appearanceSettings["sidebar_default_state"] === "collapsed" ? "compact" : "full") ?> sidebar by default.</p>
+                            </div>
+                            <div class="design-preview__frame">
+                                <div class="design-preview__sidebar">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </div>
+                                <div class="design-preview__main">
+                                    <div class="design-preview__hero"></div>
+                                    <div class="design-preview__row">
+                                        <div class="design-preview__card"></div>
+                                        <div class="design-preview__card"></div>
                                     </div>
                                 </div>
                             </div>
-                            
-                            <hr class="my-4">
-                            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-2"></i>Save Branding Settings</button>
-                        </form>
+                            <div class="settings-kpi-list">
+                                <div class="settings-kpi">
+                                    <strong><?= number_format(count($leaveTypes)) ?></strong>
+                                    <span>Leave types configured</span>
+                                </div>
+                                <div class="settings-kpi">
+                                    <strong><?= number_format(count($departments)) ?></strong>
+                                    <span>Departments in structure</span>
+                                </div>
+                                <div class="settings-kpi">
+                                    <strong><?= number_format(count($positions)) ?></strong>
+                                    <span>Position templates</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-header"><i class="bi bi-magic me-2"></i>Design Notes</div>
+                            <div class="card-body">
+                                <div class="settings-note mb-3">
+                                    <strong>Accent theme</strong> changes shared buttons, highlights, and the mood of the shell.
+                                </div>
+                                <div class="settings-note mb-3">
+                                    <strong>Surface style</strong> makes cards feel softer or more structured without changing your data layout.
+                                </div>
+                                <div class="settings-note">
+                                    <strong>Sidebar mode</strong> gives your team a compact option for smaller laptops while keeping the nav toggle available everywhere.
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -781,45 +1015,10 @@ require_once __DIR__."/../../includes/nav.php";
                 </div>
             </div>
 
-            <!-- ===== SUBSCRIPTION ===== -->
-            <div id="tab-subscription" class="settings-section <?= $activeTab==='subscription'?'active':'' ?>">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-header bg-primary text-white"><i class="bi bi-award me-2"></i>Subscription Plan</div>
-                    <div class="card-body">
-                        <div class="row g-4 align-items-center">
-                            <div class="col-md-5 text-center">
-                                <div class="mb-3">
-                                    <span class="badge bg-primary fs-5 px-4 py-2"><?= htmlspecialchars($plan["name"] ?? "Free") ?></span>
-                                </div>
-                                <p class="text-muted mb-1"><i class="bi bi-people me-2"></i><strong><?= $empCount ?></strong> / <?= ($plan["max_employees"]??0) == 9999 ? "Unlimited" : ($plan["max_employees"]??0) ?> employees</p>
-                                <p class="text-muted mb-1"><i class="bi bi-currency-dollar me-2"></i>₱<?= number_format($plan["price_monthly"] ?? 0, 2) ?> / month</p>
-                                <div class="mt-3">
-                                    <button class="btn btn-outline-primary w-100" disabled>
-                                        <i class="bi bi-arrow-up-circle me-2"></i>Upgrade Plan
-                                    </button>
-                                    <small class="text-muted d-block mt-2">Contact support to upgrade</small>
-                                </div>
-                            </div>
-                            <div class="col-md-7">
-                                <h6 class="fw-bold mb-3">Plan Features</h6>
-                                <?php
-                                $features = json_decode($plan["features"] ?? "{}", true);
-                                foreach($features as $feat => $enabled): ?>
-                                <div class="d-flex align-items-center mb-2">
-                                    <i class="bi bi-<?= $enabled ? "check-circle-fill text-success" : "x-circle text-muted" ?> me-2"></i>
-                                    <span class="<?= $enabled ? "" : "text-muted" ?>"><?= ucfirst(str_replace("_", " ", $feat)) ?></span>
-                                </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div><!-- /col-lg-9 -->
-    </div><!-- /row -->
+            </div><!-- /col-lg-9 -->
+        </div><!-- /row -->
+    </div><!-- /.settings-shell -->
 </div><!-- /container-fluid -->
-</div><!-- /main-content -->
 
 <!-- ===== MODALS ===== -->
 
@@ -968,68 +1167,76 @@ document.getElementById('addLtModal')?.addEventListener('hidden.bs.modal', funct
     document.getElementById('ltModalTitle').textContent = 'Add Leave Type';
 });
 
-// Theme switching
+function bindSelectableCards() {
+    document.querySelectorAll('.design-option input, .sidebar-color-option input').forEach((input) => {
+        input.addEventListener('change', function() {
+            const card = this.closest('.design-option, .sidebar-color-option');
+            if (!card) return;
+
+            const isSidebarColor = card.classList.contains('sidebar-color-option');
+            const activeClass = isSidebarColor ? 'selected' : 'is-active';
+            const selector = isSidebarColor
+                ? '.sidebar-color-option input[name="' + this.name + '"]'
+                : '.design-option input[name="' + this.name + '"]';
+
+            document.querySelectorAll(selector).forEach((other) => {
+                other.closest('.design-option, .sidebar-color-option')?.classList.remove(activeClass);
+            });
+
+            card.classList.add(activeClass);
+        });
+    });
+}
+
 function applyTheme(theme) {
     fetch('<?= BASE_URL ?>/api/preferences.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({theme})
+        body: JSON.stringify({theme, csrf_token: '<?= csrf_token() ?>'})
+    }).then((response) => {
+        if (!response.ok) {
+            throw new Error('Could not save theme.');
+        }
+        return response.json();
     }).then(() => {
         document.documentElement.setAttribute('data-bs-theme', theme);
-        document.body.className = document.body.className.replace(/theme-\w+/, 'theme-' + theme);
+        document.body.classList.remove('theme-light', 'theme-dark');
+        document.body.classList.add('theme-' + theme);
         document.getElementById('currentTheme').textContent = theme.charAt(0).toUpperCase() + theme.slice(1);
-        document.querySelectorAll('.theme-preview-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.theme-preview-btn').forEach((button) => button.classList.remove('active'));
         document.getElementById(theme === 'light' ? 'btnLight' : 'btnDark').classList.add('active');
+        if (typeof showToast === 'function') {
+            showToast('Theme updated.', 'success');
+        }
+    }).catch(() => {
+        if (typeof showToast === 'function') {
+            showToast('Could not save the theme right now.', 'error');
+        }
     });
 }
 
-// Password strength meter
 const newPwd = document.getElementById('newPwd');
 if (newPwd) {
     newPwd.addEventListener('input', function() {
-        const v = this.value, bar = document.getElementById('pwdStrengthBar'), lbl = document.getElementById('pwdStrengthLabel');
+        const v = this.value;
+        const bar = document.getElementById('pwdStrengthBar');
+        const lbl = document.getElementById('pwdStrengthLabel');
         let score = 0;
-        if (v.length >= 8)  score++;
+
+        if (v.length >= 8) score++;
         if (/[A-Z]/.test(v)) score++;
         if (/[0-9]/.test(v)) score++;
         if (/[^a-zA-Z0-9]/.test(v)) score++;
-        const colors = ['#ef4444','#f59e0b','#10b981','#059669'];
-        const labels = ['Weak','Fair','Good','Strong'];
+
+        const colors = ['#ef4444', '#f59e0b', '#10b981', '#059669'];
+        const labels = ['Weak', 'Fair', 'Good', 'Strong'];
         bar.style.width = (score * 25) + '%';
         bar.style.background = colors[score - 1] || '#e2e8f0';
         lbl.textContent = score > 0 ? labels[score - 1] : '';
     });
 }
-</script>
 
-<style>
-.theme-preview-btn {
-    background: none;
-    border: 2px solid var(--border-color);
-    border-radius: 12px;
-    padding: 0.5rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    width: 110px;
-}
-.theme-preview-btn.active, .theme-preview-btn:hover {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
-}
-.preview-card {
-    border-radius: 8px;
-    padding: 0.5rem;
-    height: 70px;
-    overflow: hidden;
-}
-.light-preview { background: #f1f5f9; }
-.dark-preview  { background: #0f172a; }
-.preview-bar   { height: 10px; border-radius: 4px; margin-bottom: 4px; }
-.light-preview .preview-bar   { background: #1e293b; }
-.dark-preview  .preview-bar   { background: #334155; }
-.preview-content { height: 36px; border-radius: 6px; }
-.light-preview .preview-content { background: #ffffff; }
-.dark-preview  .preview-content { background: #1e293b; }
-</style>
+bindSelectableCards();
+</script>
 
 <?php require_once __DIR__."/../../includes/footer.php"; ?>

@@ -6,11 +6,16 @@
 <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="<?= BASE_URL ?>/public/assets/js/app.js"></script>
+<script src="<?= BASE_URL ?>/public/assets/js/app.clean.js?v=20260406e"></script>
 <script>
 const BASE_URL = '<?= BASE_URL ?>';
 const USER_ID = <?= $u['id'] ?? 'null' ?>;
 const CSRF_TOKEN = '<?= csrf_token() ?>';
+
+// Ensure Bootstrap is loaded
+if (typeof bootstrap === 'undefined') {
+    console.error('Bootstrap JS not loaded!');
+}
 
 // Toast notification function
 function showToast(message, type = 'info', duration = 4000) {
@@ -38,17 +43,29 @@ function showToast(message, type = 'info', duration = 4000) {
 // Theme toggle
 function toggleTheme() {
     const html = document.documentElement;
+    const body = document.body;
     const current = html.getAttribute('data-bs-theme');
     const newTheme = current === 'dark' ? 'light' : 'dark';
     
     html.setAttribute('data-bs-theme', newTheme);
-    document.body.className = 'theme-' + newTheme;
+    if (body) {
+        body.classList.remove('theme-light', 'theme-dark');
+        body.classList.add('theme-' + newTheme);
+    }
     
     // Update icons
-    document.querySelectorAll('.bi-sun, .bi-moon').forEach(el => {
-        el.classList.toggle('bi-sun');
-        el.classList.toggle('bi-moon');
+    document.querySelectorAll('[data-theme-icon]').forEach(el => {
+        el.classList.remove('bi-sun', 'bi-moon');
+        el.classList.add(newTheme === 'dark' ? 'bi-sun' : 'bi-moon');
     });
+
+    const currentThemeBadge = document.getElementById('currentTheme');
+    if (currentThemeBadge) {
+        currentThemeBadge.textContent = newTheme.charAt(0).toUpperCase() + newTheme.slice(1);
+    }
+
+    document.querySelectorAll('.theme-preview-btn').forEach((button) => button.classList.remove('active'));
+    document.getElementById(newTheme === 'light' ? 'btnLight' : 'btnDark')?.classList.add('active');
     
     // Save preference
     fetch(BASE_URL + '/api/preferences.php', {
@@ -106,6 +123,8 @@ function markAllRead() {
 document.addEventListener('DOMContentLoaded', () => {
     loadNotifications();
     setInterval(loadNotifications, 60000);
+    
+    // Bootstrap handles data-bs-toggle="modal" automatically.
 });
 </script>
 </body></html>
