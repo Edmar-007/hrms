@@ -4,8 +4,6 @@ require_once __DIR__.'/../includes/functions.php';
 require_once __DIR__.'/../includes/csrf.php';
 if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/modules/dashboard.php"); exit; }
 
-$plans = $pdo->query("SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY price_monthly")->fetchAll();
-
 if(is_post()){
     if(!verify_csrf()) die("Invalid CSRF");
     
@@ -13,7 +11,6 @@ if(is_post()){
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirm = $_POST['confirm_password'] ?? '';
-    $plan = $_POST['plan'] ?? 'free';
     
     // Validations
     if(empty($companyName) || empty($email) || empty($password)) {
@@ -33,17 +30,12 @@ if(is_post()){
             $slug = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $companyName));
             $slug = substr($slug, 0, 50) . '-' . rand(100, 999);
             
-            // Get plan details
-            $planInfo = $pdo->prepare("SELECT * FROM subscription_plans WHERE slug = ?");
-            $planInfo->execute([$plan]);
-            $planInfo = $planInfo->fetch();
-            
             try {
                 $pdo->beginTransaction();
                 
                 // Create company
-                $st = $pdo->prepare("INSERT INTO companies (name, slug, email, plan, max_employees) VALUES (?, ?, ?, ?, ?)");
-                $st->execute([$companyName, $slug, $email, $plan, $planInfo['max_employees'] ?? 5]);
+                $st = $pdo->prepare("INSERT INTO companies (name, slug, email) VALUES (?, ?, ?)");
+                $st->execute([$companyName, $slug, $email]);
                 $companyId = $pdo->lastInsertId();
                 
                 // Create default departments & positions
@@ -58,7 +50,9 @@ if(is_post()){
                 $userId = $pdo->lastInsertId();
                 
                 // Create user preferences
-                $pdo->prepare("INSERT INTO user_preferences (user_id, theme) VALUES (?, 'light')")->execute([$userId]);
+                try {
+                    $pdo->prepare("INSERT INTO user_preferences (user_id, theme) VALUES (?, 'light')")->execute([$userId]);
+                } catch(PDOException $e) {}
                 
                 $pdo->commit();
                 $success = true;
@@ -71,24 +65,28 @@ if(is_post()){
 }
 ?>
 <!doctype html>
-<html>
+<html data-bs-theme="light">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Register - <?= APP_NAME ?></title>
+    <title>Register &mdash; <?= APP_NAME ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="<?= BASE_URL ?>/public/assets/css/style.css" rel="stylesheet">
+    <link href="<?= BASE_URL ?>/public/assets/css/style.css?v=20260406a" rel="stylesheet">
+    <link href="<?= BASE_URL ?>/public/assets/css/modern-ui.css?v=20260406a" rel="stylesheet">
 </head>
-<body>
+<body class="theme-light">
 <div class="auth-page">
-    <div class="auth-card" style="max-width: 500px;">
+    <div class="auth-card" style="max-width: 450px;">
         <div class="card">
             <div class="card-body">
                 <?php if(!empty($success)): ?>
                 <div class="text-center py-4">
-                    <div style="width:80px;height:80px;background:linear-gradient(135deg,#10b981,#059669);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;">
-                        <i class="bi bi-check-lg text-white" style="font-size:2.5rem;"></i>
+                    <div class="auth-success-icon">
+                        <i class="bi bi-check-lg"></i>
                     </div>
                     <h4 class="text-success">Registration Successful!</h4>
                     <p class="text-muted mb-4">Your company account has been created.</p>
@@ -96,11 +94,11 @@ if(is_post()){
                 </div>
                 <?php else: ?>
                 <div class="text-center mb-4">
-                    <div style="width:70px;height:70px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
-                        <i class="bi bi-building-add text-white" style="font-size:2rem;"></i>
+                    <div class="auth-logo-icon">
+                        <i class="bi bi-building-add"></i>
                     </div>
-                    <h4>Register Your Company</h4>
-                    <p class="subtitle">Start your free trial today</p>
+                    <h4 class="mt-3">Register Your Company</h4>
+                    <p class="subtitle">Create your HRMS account</p>
                 </div>
                 
                 <?php if(!empty($err)): ?>
@@ -123,7 +121,7 @@ if(is_post()){
                             <input class="form-control" type="email" name="email" placeholder="admin@yourcompany.com" required>
                         </div>
                     </div>
-                    <div class="row g-3 mb-3">
+                    <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label">Password</label>
                             <input class="form-control" type="password" name="password" placeholder="Min 6 characters" required>
@@ -131,20 +129,6 @@ if(is_post()){
                         <div class="col-md-6">
                             <label class="form-label">Confirm Password</label>
                             <input class="form-control" type="password" name="confirm_password" placeholder="Repeat password" required>
-                        </div>
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label">Select Plan</label>
-                        <div class="row g-2">
-                            <?php foreach($plans as $p): ?>
-                            <div class="col-6">
-                                <input type="radio" class="btn-check" name="plan" id="plan-<?= $p['slug'] ?>" value="<?= $p['slug'] ?>" <?= $p['slug']==='free'?'checked':'' ?>>
-                                <label class="btn btn-outline-primary w-100 py-3" for="plan-<?= $p['slug'] ?>">
-                                    <strong class="d-block"><?= e($p['name']) ?></strong>
-                                    <small class="text-muted"><?= $p['price_monthly'] > 0 ? '₱'.number_format($p['price_monthly']).'/mo' : 'Free' ?></small>
-                                </label>
-                            </div>
-                            <?php endforeach; ?>
                         </div>
                     </div>
                     <button class="btn btn-primary w-100 py-2"><i class="bi bi-rocket-takeoff me-2"></i>Create Account</button>
@@ -156,8 +140,8 @@ if(is_post()){
                 <?php endif; ?>
             </div>
         </div>
-        <p class="text-center mt-3 text-white-50 small">
-            <i class="bi bi-shield-check me-1"></i>14-day free trial • No credit card required
+        <p class="auth-footnote text-center mt-3 small">
+            <i class="bi bi-shield-check me-1"></i>Secure • Multi-tenant • Enterprise HRMS
         </p>
     </div>
 </div>

@@ -7,42 +7,55 @@ $features = json_decode($company['features'] ?? '{}', true);
 $navSettings = json_decode($company['nav_settings'] ?? '{}', true);
 $sidebarColor = $navSettings['sidebar_color'] ?? 'default';
 $companyLogo = $company['logo_url'] ?? '';
+$companyPlanLabel = !empty($company['plan']) ? ucfirst((string) $company['plan']) . ' workspace' : 'Live workspace';
 ?>
 <?php if($u): ?>
 <!-- Mobile Header -->
-<div class="mobile-header d-lg-none">
-    <button class="btn btn-link text-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">
-        <i class="bi bi-list fs-4"></i>
+<div class="mobile-header d-lg-none" id="mobileHeader">
+    <button class="sidebar-toggle-btn" id="sidebarToggle" type="button" aria-label="Toggle sidebar">
+        <i class="bi bi-list fs-5"></i>
     </button>
-    <span class="brand">
+    <span class="mobile-brand">
         <?php if($companyLogo): ?>
-            <img src="<?= e($companyLogo) ?>" alt="<?= e($company['name'] ?? APP_NAME) ?>" style="height:28px;" class="me-2">
+            <img src="<?= e($companyLogo) ?>" alt="<?= e($company['name'] ?? APP_NAME) ?>" style="height:26px;" class="me-2">
+        <?php else: ?>
+            <i class="bi bi-building-check me-2" style="color:#818cf8"></i>
         <?php endif; ?>
         <?= e($company['name'] ?? APP_NAME) ?>
     </span>
     <div class="ms-auto d-flex align-items-center gap-2">
-        <button class="btn btn-link text-white p-0" onclick="toggleTheme()">
-            <i class="bi bi-<?= ($u['theme']??'light')==='dark'?'sun':'moon' ?>"></i>
+        <button class="sidebar-toggle-btn" onclick="toggleTheme()" title="Toggle theme" type="button">
+            <i class="bi bi-<?= ($u['theme']??'light')==='dark'?'sun':'moon' ?>" data-theme-icon></i>
         </button>
     </div>
 </div>
 
-<!-- Sidebar -->
-<aside class="sidebar d-lg-block offcanvas-lg offcanvas-start <?= $sidebarColor !== 'default' ? 'sidebar-'.$sidebarColor : '' ?>" id="sidebar">
+<!-- Sidebar Backdrop (mobile) -->
+<div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+<!-- Sidebar — NO offcanvas-lg; custom mobile toggle instead -->
+<aside class="sidebar <?= $sidebarColor !== 'default' ? 'sidebar-'.$sidebarColor : '' ?>" id="sidebar">
     <div class="sidebar-header">
         <?php if($companyLogo): ?>
-            <img src="<?= e($companyLogo) ?>" alt="Logo" style="height:36px;border-radius:8px;" class="sidebar-logo">
+            <img src="<?= e($companyLogo) ?>" alt="Logo" style="height:34px;border-radius:8px;object-fit:contain;" class="sidebar-logo">
         <?php else: ?>
-            <i class="bi bi-building-check"></i>
+            <div class="sidebar-icon-wrap"><i class="bi bi-building-check"></i></div>
         <?php endif; ?>
-        <span><?= e($company['name'] ?? 'HRMS') ?></span>
+        <div class="sidebar-brand-copy">
+            <span class="sidebar-eyebrow">HR operations</span>
+            <strong class="sidebar-brand-name"><?= e($company['name'] ?? 'HRMS') ?></strong>
+            <small class="sidebar-brand-plan"><?= e($companyPlanLabel) ?></small>
+        </div>
+        <button class="sidebar-compact-toggle d-none d-lg-inline-flex" type="button" data-sidebar-toggle="desktop" title="Collapse sidebar" aria-label="Collapse sidebar">
+            <i class="bi bi-layout-sidebar-inset"></i>
+        </button>
     </div>
     
     <nav class="sidebar-nav">
-        <div class="nav-section">MAIN MENU</div>
+        <div class="nav-section-label">MAIN MENU</div>
         
         <a href="<?= BASE_URL ?>/modules/dashboard.php" class="nav-item <?= $currentPage==='dashboard.php'?'active':'' ?>">
-            <i class="bi bi-grid-1x2-fill"></i>
+            <i class="bi bi-speedometer2"></i>
             <span>Dashboard</span>
         </a>
         
@@ -57,13 +70,20 @@ $companyLogo = $company['logo_url'] ?? '';
         </a>
         
         <a href="<?= BASE_URL ?>/modules/leaves/index.php" class="nav-item <?= $currentDir==='leaves'?'active':'' ?>">
-            <i class="bi bi-calendar-event"></i>
+            <i class="bi bi-calendar-event-fill"></i>
             <span>Leave Requests</span>
         </a>
+
+        <a href="<?= BASE_URL ?>/modules/claims/index.php" class="nav-item <?= $currentDir==='claims'?'active':'' ?>">
+            <i class="bi bi-receipt"></i>
+            <span>Expense Claims</span>
+        </a>
+
         <a href="<?= BASE_URL ?>/modules/profile/index.php" class="nav-item <?= $currentDir==='profile'?'active':'' ?>">
             <i class="bi bi-person-circle"></i>
             <span>My Profile</span>
         </a>
+
         <?php if(($features['payroll'] ?? true) && !in_array($u['role'], ['Admin','HR Officer'])): ?>
         <a href="<?= BASE_URL ?>/modules/payroll/my-summary.php" class="nav-item <?= $currentPage==='my-summary.php'?'active':'' ?>">
             <i class="bi bi-cash-coin"></i>
@@ -72,7 +92,8 @@ $companyLogo = $company['logo_url'] ?? '';
         <?php endif; ?>
         
         <?php if(in_array($u['role'], ['Admin', 'HR Officer'])): ?>
-        <div class="nav-section">MANAGEMENT</div>
+        <div class="nav-section-label">MANAGEMENT</div>
+
         <?php if($u['role'] === 'Admin'): ?>
         <a href="<?= BASE_URL ?>/modules/users/index.php" class="nav-item <?= $currentDir==='users'?'active':'' ?>">
             <i class="bi bi-person-gear"></i>
@@ -89,19 +110,27 @@ $companyLogo = $company['logo_url'] ?? '';
         
         <?php if($features['reports'] ?? true): ?>
         <a href="<?= BASE_URL ?>/modules/reports/index.php" class="nav-item <?= $currentDir==='reports'?'active':'' ?>">
-            <i class="bi bi-bar-chart-line-fill"></i>
+            <i class="bi bi-bar-chart-fill"></i>
             <span>Reports</span>
         </a>
         <?php endif; ?>
 
-        <?php if(in_array($u['role'], ['Admin','HR Officer'])): ?>
+        <a href="<?= BASE_URL ?>/modules/analytics/index.php" class="nav-item <?= $currentDir==='analytics'?'active':'' ?>">
+            <i class="bi bi-graph-up"></i>
+            <span>HR Analytics</span>
+        </a>
+
+        <a href="<?= BASE_URL ?>/modules/compensation/index.php" class="nav-item <?= $currentDir==='compensation'?'active':'' ?>">
+            <i class="bi bi-currency-dollar"></i>
+            <span>Compensation</span>
+        </a>
+
         <a href="<?= BASE_URL ?>/modules/audit/logs.php" class="nav-item <?= $currentDir==='audit'?'active':'' ?>">
             <i class="bi bi-journal-text"></i>
             <span>Audit Logs</span>
         </a>
-        <?php endif; ?>
         
-        <div class="nav-section">SETTINGS</div>
+        <div class="nav-section-label">SYSTEM</div>
         
         <a href="<?= BASE_URL ?>/modules/settings/index.php" class="nav-item <?= $currentDir==='settings'?'active':'' ?>">
             <i class="bi bi-gear-fill"></i>
@@ -115,14 +144,14 @@ $companyLogo = $company['logo_url'] ?? '';
             <div class="avatar"><?= strtoupper(substr($u['name'] ?: $u['email'], 0, 1)) ?></div>
             <div class="details">
                 <div class="name"><?= e($u['name'] ?: $u['email']) ?></div>
-                <div class="role"><?= e($u['role']) ?></div>
+                <div class="role-badge"><?= e($u['role']) ?></div>
             </div>
         </div>
-        <div class="d-flex">
-            <button class="icon-btn me-1" onclick="toggleTheme()" title="Toggle theme">
-                <i class="bi bi-<?= ($u['theme']??'light')==='dark'?'sun':'moon' ?>"></i>
+        <div class="d-flex gap-1">
+            <button class="icon-btn" onclick="toggleTheme()" title="Toggle theme" type="button">
+                <i class="bi bi-<?= ($u['theme']??'light')==='dark'?'sun':'moon' ?>" data-theme-icon></i>
             </button>
-            <a href="<?= BASE_URL ?>/auth/logout.php" class="logout-btn" title="Logout">
+            <a href="<?= BASE_URL ?>/auth/logout.php" class="icon-btn logout-btn" title="Logout">
                 <i class="bi bi-box-arrow-right"></i>
             </a>
         </div>
@@ -130,34 +159,47 @@ $companyLogo = $company['logo_url'] ?? '';
 </aside>
 
 <!-- Main Content Wrapper -->
-<main class="main-content">
-    <!-- Top Bar -->
+<main class="main-content" id="mainContent">
+    <!-- Top Bar (desktop only) -->
     <div class="top-bar d-none d-lg-flex">
-        <div class="d-flex align-items-center">
-            <span class="text-muted me-3"><i class="bi bi-calendar3 me-2"></i><?= date('l, F j, Y') ?></span>
-            <?php if($company): ?>
-            <span class="badge bg-<?= $company['plan']==='free'?'secondary':($company['plan']==='enterprise'?'warning':'primary') ?>">
-                <i class="bi bi-star-fill me-1"></i><?= ucfirst($company['plan']) ?> Plan
-            </span>
-            <?php endif; ?>
+        <div class="top-bar-meta">
+            <div class="top-bar-title-group">
+                <span class="top-bar-kicker">Workspace</span>
+                <span class="top-bar-heading"><?= e($company['name'] ?? APP_NAME) ?></span>
+            </div>
+            <span class="top-bar-date"><i class="bi bi-calendar3 me-2"></i><?= date('D, M j, Y') ?></span>
         </div>
         <div class="d-flex align-items-center gap-3">
+            <span class="workspace-status"><i class="bi bi-activity"></i>Live</span>
+            <button class="topbar-icon-btn d-none d-lg-inline-flex" type="button" data-sidebar-toggle="desktop" title="Toggle compact sidebar" aria-label="Toggle compact sidebar">
+                <i class="bi bi-layout-sidebar-inset"></i>
+            </button>
+            <button class="topbar-icon-btn" onclick="toggleTheme()" title="Toggle theme" type="button">
+                <i class="bi bi-<?= ($u['theme']??'light')==='dark'?'sun':'moon' ?>" data-theme-icon></i>
+            </button>
             <div class="dropdown">
-                <button class="btn btn-link text-muted p-0 position-relative" data-bs-toggle="dropdown">
+                <button class="topbar-icon-btn position-relative" data-bs-toggle="dropdown" aria-label="Notifications">
                     <i class="bi bi-bell fs-5"></i>
                     <span class="notification-badge" id="notif-count"></span>
                 </button>
                 <div class="dropdown-menu dropdown-menu-end notification-dropdown">
-                    <div class="dropdown-header d-flex justify-content-between align-items-center">
-                        <span>Notifications</span>
-                        <a href="#" class="small text-primary" onclick="markAllRead()">Mark all read</a>
+                    <div class="notif-header">
+                        <span class="fw-700">Notifications</span>
+                        <a href="#" class="small text-primary text-decoration-none" onclick="markAllRead()">Mark all read</a>
                     </div>
                     <div id="notification-list">
-                        <div class="text-center text-muted py-4">
-                            <i class="bi bi-bell-slash fs-3 d-block mb-2"></i>
-                            No notifications
+                        <div class="notif-empty">
+                            <i class="bi bi-bell-slash d-block mb-2 fs-3"></i>
+                            No notifications yet
                         </div>
                     </div>
+                </div>
+            </div>
+            <div class="topbar-user">
+                <div class="topbar-avatar"><?= strtoupper(substr($u['name'] ?: $u['email'], 0, 1)) ?></div>
+                <div class="topbar-user-info">
+                    <div class="topbar-name"><?= e(explode(' ', $u['name'] ?: $u['email'])[0]) ?></div>
+                    <div class="topbar-role"><?= e($u['role']) ?></div>
                 </div>
             </div>
         </div>

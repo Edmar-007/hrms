@@ -135,7 +135,10 @@ if (paySearch) {
         payCount.textContent = v + ' employees';
     });
 }
-document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+// Bootstrap tooltips – deferred so Bootstrap JS (loaded in footer) is available
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
 </script>
 
 <div class="row mt-4">

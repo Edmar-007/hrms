@@ -102,7 +102,6 @@ require_role(['Admin', 'HR Officer', 'Manager']);
 
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-const BASE_URL = '<?= BASE_URL ?>';
 let html5QrCode = null;
 let isScanning = false;
 let lastScannedCode = '';
@@ -112,7 +111,7 @@ let lastFeedId = 0;
 const statusEl = document.getElementById('scanner-status');
 const btnStart = document.getElementById('btn-start');
 const btnStop = document.getElementById('btn-stop');
-const successModal = new bootstrap.Modal(document.getElementById('successModal'));
+let successModal = null; // initialised after Bootstrap loads (DOMContentLoaded)
 
 function setStatus(text, type) {
     statusEl.className = 'scanner-status ' + type;
@@ -255,8 +254,9 @@ async function stopScanner() {
 btnStart.addEventListener('click', startScanner);
 btnStop.addEventListener('click', stopScanner);
 
-// Auto-start on load
+// Auto-start on load – initialise Bootstrap modal here, after BS JS is parsed
 document.addEventListener('DOMContentLoaded', () => {
+    successModal = new bootstrap.Modal(document.getElementById('successModal'));
     setTimeout(startScanner, 500);
     setInterval(refreshLiveFeed, 5000);
 });

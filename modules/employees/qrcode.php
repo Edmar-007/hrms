@@ -221,32 +221,58 @@ $gradient = "linear-gradient(135deg, {$p['from']}, {$p['to']})";
     </div>
 </div>
 
-<script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 <script>
 const qrData   = <?= json_encode($qrData) ?>;
 const empName  = <?= json_encode($emp['first_name'] . '_' . $emp['last_name']) ?>;
 const cardColor = <?= json_encode($p['from']) ?>;
 
-function getQROptions() {
+let qrInstance = null;
+
+function getQRColors() {
     const theme = document.querySelector('input[name="qrTheme"]:checked')?.value ?? 'dark';
-    const size  = parseInt(document.getElementById('qrSize')?.value ?? 200);
     let dark = '#1e293b', light = '#ffffff';
     if (theme === 'light')  { dark = '#ffffff'; light = '#1e293b'; }
     if (theme === 'color')  { dark = cardColor; light = '#ffffff'; }
-    return { width: size, margin: 1, color: { dark, light } };
+    return { dark, light };
 }
 
 function regenerateQR() {
     const container = document.getElementById('qr-code');
+    if (!container) return;
+    
+    const size = parseInt(document.getElementById('qrSize')?.value ?? 200);
+    const colors = getQRColors();
+    
+    // Clear existing QR
     container.innerHTML = '';
-    QRCode.toCanvas(document.createElement('canvas'), qrData, getQROptions(), function(err, canvas) {
-        if (!err) container.appendChild(canvas);
-    });
+    
+    // Check if QRCode library is loaded
+    if (typeof QRCode === 'undefined') {
+        container.innerHTML = '<p class="text-danger">QR Code library failed to load</p>';
+        console.error('QRCode library not loaded');
+        return;
+    }
+    
+    try {
+        // Create new QR code using QRCode.js library
+        qrInstance = new QRCode(container, {
+            text: qrData,
+            width: size,
+            height: size,
+            colorDark: colors.dark,
+            colorLight: colors.light,
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    } catch (e) {
+        console.error('QR Code generation failed:', e);
+        container.innerHTML = '<p class="text-danger">Failed to generate QR code</p>';
+    }
 }
 
 // Initial render
-regenerateQR();
+document.addEventListener('DOMContentLoaded', regenerateQR);
 
 function toggleCompanyBar() {
     const el = document.querySelector('.id-card-company-bar');
@@ -255,7 +281,16 @@ function toggleCompanyBar() {
 
 function downloadQROnly() {
     const canvas = document.querySelector('#qr-code canvas');
-    if (!canvas) return;
+    if (!canvas) {
+        const img = document.querySelector('#qr-code img');
+        if (img) {
+            const link = document.createElement('a');
+            link.download = 'QR_' + empName + '.png';
+            link.href = img.src;
+            link.click();
+        }
+        return;
+    }
     const link = document.createElement('a');
     link.download = 'QR_' + empName + '.png';
     link.href = canvas.toDataURL('image/png');

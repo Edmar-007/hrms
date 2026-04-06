@@ -50,22 +50,29 @@ if (is_post()) {
 }
 ?>
 <!doctype html>
-<html>
+<html data-bs-theme="light">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Forgot Password - <?= APP_NAME ?></title>
+    <title>Forgot Password &mdash; <?= APP_NAME ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="<?= BASE_URL ?>/public/assets/css/style.css" rel="stylesheet">
+    <link href="<?= BASE_URL ?>/public/assets/css/style.css?v=20260406a" rel="stylesheet">
+    <link href="<?= BASE_URL ?>/public/assets/css/modern-ui.css?v=20260406a" rel="stylesheet">
 </head>
-<body>
+<body class="theme-light">
 <div class="auth-page">
     <div class="auth-card">
         <div class="card">
             <div class="card-body">
                 <div class="text-center mb-4">
-                    <h4>Forgot Password</h4>
+                    <div class="auth-logo-icon">
+                        <i class="bi bi-key"></i>
+                    </div>
+                    <h4 class="mt-3">Forgot Password</h4>
                     <p class="subtitle">Enter your account email to reset your password.</p>
                 </div>
 
@@ -97,4 +104,3 @@ if (is_post()) {
 </div>
 </body>
 </html>
-

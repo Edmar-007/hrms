@@ -90,13 +90,14 @@ $totalInactive = count($rows) - $totalActive;
 </div>
 
 <?php if(isset($_GET['msg']) || $deleteFailed): ?>
+<?php $msg = $_GET['msg'] ?? ''; ?>
 <div class="alert <?= $deleteFailed ? 'alert-danger' : 'alert-success' ?> alert-dismissible fade show">
     <i class="bi bi-<?= $deleteFailed ? 'exclamation-circle' : 'check-circle' ?> me-2"></i>
     <?php
     if($deleteFailed) echo 'Unable to deactivate employee.';
     else {
         $msgs = ['added'=>'Employee added successfully!','updated'=>'Employee updated!','deleted'=>'Employee deactivated!','reactivated'=>'Employee reactivated!'];
-        echo $msgs[$_GET['msg']] ?? 'Done!';
+        echo $msgs[$msg] ?? 'Done!';
     }
     ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -381,8 +382,10 @@ document.querySelectorAll('form.confirm-form').forEach(form => {
     });
 });
 
-// Bootstrap tooltips
-document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+// Bootstrap tooltips – deferred so Bootstrap JS (loaded in footer) is available
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+});
 </script>
 
 <?php require_once __DIR__.'/../../includes/footer.php'; ?>

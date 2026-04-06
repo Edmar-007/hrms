@@ -21,11 +21,10 @@ if(is_post()){
     if($cols) {
       // New SaaS schema
       $st=$pdo->prepare("SELECT u.*, e.first_name, e.last_name, c.id as comp_id, c.name as comp_name, c.slug as comp_slug, 
-          c.plan, c.max_employees, c.currency, c.timezone, p.features
+          c.currency, c.timezone, c.features
           FROM users u 
           LEFT JOIN employees e ON e.id=u.employee_id 
           LEFT JOIN companies c ON c.id=u.company_id
-          LEFT JOIN subscription_plans p ON p.slug=c.plan
           WHERE u.email=? AND u.is_active=1 LIMIT 1");
       $st->execute([$email]); 
       $u=$st->fetch();
@@ -63,8 +62,6 @@ if(is_post()){
           'id' => $u['comp_id'] ?? 1,
           'name' => $u['comp_name'] ?? 'My Company',
           'slug' => $u['comp_slug'] ?? 'default',
-          'plan' => $u['plan'] ?? 'professional',
-          'max_employees' => $u['max_employees'] ?? 100,
           'currency' => $u['currency'] ?? 'PHP',
           'timezone' => $u['timezone'] ?? 'Asia/Manila',
           'features' => $u['features'] ?? '{"attendance":true,"leaves":true,"payroll":true,"reports":true,"qr_scanner":true}'
@@ -86,62 +83,90 @@ if(is_post()){
 }
 ?>
 <!doctype html>
-<html>
+<html data-bs-theme="light">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login - <?= APP_NAME ?></title>
+    <title>Login &mdash; <?= APP_NAME ?></title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="<?= BASE_URL ?>/public/assets/css/style.css" rel="stylesheet">
+    <link href="<?= BASE_URL ?>/public/assets/css/style.css?v=20260406a" rel="stylesheet">
+    <link href="<?= BASE_URL ?>/public/assets/css/modern-ui.css?v=20260406a" rel="stylesheet">
 </head>
-<body>
+<body class="theme-light">
 <div class="auth-page">
     <div class="auth-card">
         <div class="card">
             <div class="card-body">
                 <div class="text-center mb-4">
-                    <div style="width:70px;height:70px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
-                        <i class="bi bi-building-check text-white" style="font-size:2rem;"></i>
+                    <div class="auth-logo-icon">
+                        <i class="bi bi-building-check"></i>
                     </div>
-                    <h4>Welcome Back</h4>
+                    <h4 class="mt-3 mb-1">Welcome Back</h4>
                     <p class="subtitle">Sign in to your HRMS account</p>
                 </div>
                 
                 <?php if(!empty($err)): ?>
-                <div class="alert alert-danger"><i class="bi bi-exclamation-circle me-2"></i><?= e($err) ?></div>
+                <div class="alert alert-danger d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-exclamation-circle-fill flex-shrink-0"></i>
+                    <div><?= e($err) ?></div>
+                </div>
                 <?php endif; ?>
                 
-                <form method="post">
+                <form method="post" novalidate>
                     <?= csrf_input() ?>
                     <div class="mb-3">
-                        <label class="form-label">Email Address</label>
+                        <label class="form-label fw-semibold">Email Address</label>
                         <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-envelope"></i></span>
-                            <input class="form-control" type="email" name="email" placeholder="you@example.com" required autofocus>
+                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-envelope text-muted"></i></span>
+                            <input class="form-control border-start-0 ps-0" type="email" name="email" placeholder="you@company.com" required autofocus value="<?= e($_POST['email'] ?? '') ?>">
                         </div>
                     </div>
                     <div class="mb-4">
-                        <label class="form-label">Password</label>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold mb-0">Password</label>
+                            <a href="forgot-password.php" class="small text-primary text-decoration-none">Forgot password?</a>
+                        </div>
                         <div class="input-group">
-                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
-                            <input class="form-control" type="password" name="password" placeholder="••••••••" required>
+                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-lock text-muted"></i></span>
+                            <input class="form-control border-start-0 border-end-0 ps-0" type="password" name="password" id="passwordInput" placeholder="••••••••" required>
+                            <button class="btn btn-outline-secondary border-start-0" type="button" onclick="togglePassword()" tabindex="-1">
+                                <i class="bi bi-eye" id="togglePasswordIcon"></i>
+                            </button>
                         </div>
                     </div>
-                    <button class="btn btn-primary w-100 py-2"><i class="bi bi-box-arrow-in-right me-2"></i>Sign In</button>
+                    <button class="btn btn-primary w-100 py-2 fw-semibold" type="submit">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                    </button>
                 </form>
                 
-                <div class="text-center mt-4">
-                    <div class="mb-2"><a href="forgot-password.php" class="text-decoration-none">Forgot password?</a></div>
-                    <a href="register.php" class="text-decoration-none">Don't have an account? <strong>Register your company</strong></a>
+                <hr class="my-4">
+                <div class="text-center">
+                    <p class="mb-0 text-muted small">Don't have an account? <a href="register.php" class="text-primary fw-semibold text-decoration-none">Register your company</a></p>
                 </div>
             </div>
         </div>
-        <p class="text-center mt-3 text-white-50 small">
-            <i class="bi bi-shield-check me-1"></i>Secure multi-tenant HRMS platform
+        <p class="auth-footnote text-center mt-3 small">
+            <i class="bi bi-shield-check me-1"></i>Secure &bull; Multi-tenant &bull; Enterprise HRMS
         </p>
     </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function togglePassword() {
+    const inp = document.getElementById('passwordInput');
+    const ico = document.getElementById('togglePasswordIcon');
+    if (inp.type === 'password') {
+        inp.type = 'text';
+        ico.className = 'bi bi-eye-slash';
+    } else {
+        inp.type = 'password';
+        ico.className = 'bi bi-eye';
+    }
+}
+</script>
 </body>
 </html>

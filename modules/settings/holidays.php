@@ -86,9 +86,10 @@ foreach ($monthHolidays as $h) {
 </div>
 
 <?php if (isset($_GET['msg'])): ?>
+<?php $msg = $_GET['msg'] ?? ''; ?>
 <div class="alert alert-success alert-dismissible fade show" role="alert">
     <i class="bi bi-check-circle me-2"></i>
-    <?= $_GET['msg'] === 'added' ? 'Holiday added successfully!' : ($_GET['msg'] === 'deleted' ? 'Holiday deleted!' : '') ?>
+    <?= $msg === 'added' ? 'Holiday added successfully!' : ($msg === 'deleted' ? 'Holiday deleted!' : '') ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 <?php endif; ?>

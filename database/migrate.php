@@ -1,49 +1,75 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 
-// Read SQL file
-$sqlFile = __DIR__ . '/../hrms.sql';
-$sql = file_get_contents($sqlFile);
-
-// Split by semicolon and execute
-$statements = array_filter(array_map('trim', explode(';', $sql)));
-
 $executed = 0;
 $errors = [];
 
-foreach ($statements as $statement) {
-    if (empty($statement)) continue;
+function should_ignore_migration_error(string $message): bool
+{
+    $ignorePatterns = [
+        'already exists',
+        'Duplicate',
+        'Duplicate column',
+        'Duplicate key name',
+        "doesn't exist",
+    ];
 
-    try {
-        $pdo->exec($statement);
-        $executed++;
-    } catch (PDOException $e) {
-        // Some statements may fail (like IF NOT EXISTS), that's okay
-        if (strpos($e->getMessage(), 'already exists') === false &&
-            strpos($e->getMessage(), 'Duplicate') === false) {
-            $errors[] = $e->getMessage();
+    foreach ($ignorePatterns as $pattern) {
+        if (stripos($message, $pattern) !== false) {
+            return true;
         }
     }
+
+    return false;
 }
 
-// Run phase3 incremental schema updates if available
-$phase3 = __DIR__ . '/ensure_phase3.sql';
-if (file_exists($phase3)) {
-    $extraSql = file_get_contents($phase3);
-    $extraStatements = array_filter(array_map('trim', explode(';', $extraSql)));
-    foreach ($extraStatements as $statement) {
-        if (empty($statement)) continue;
+function execute_sql_file(PDO $pdo, string $path, int &$executed, array &$errors): void
+{
+    if (!file_exists($path)) {
+        return;
+    }
+
+    $sql = file_get_contents($path);
+    if ($sql === false) {
+        $errors[] = 'Could not read SQL file: ' . basename($path);
+        return;
+    }
+
+    $sql = preg_replace('/^\xEF\xBB\xBF/', '', $sql);
+
+    $statements = array_filter(array_map('trim', explode(';', $sql)));
+
+    foreach ($statements as $statement) {
+        if ($statement === '') {
+            continue;
+        }
+
         try {
             $pdo->exec($statement);
             $executed++;
         } catch (PDOException $e) {
-            if (strpos($e->getMessage(), 'already exists') === false &&
-                strpos($e->getMessage(), 'Duplicate') === false &&
-                strpos($e->getMessage(), 'Duplicate column') === false) {
+            if (!should_ignore_migration_error($e->getMessage())) {
                 $errors[] = $e->getMessage();
             }
         }
     }
+}
+
+$compatFile = __DIR__ . '/ensure_legacy_compat.sql';
+execute_sql_file($pdo, $compatFile, $executed, $errors);
+
+$sqlFile = __DIR__ . '/../hrms.sql';
+execute_sql_file($pdo, $sqlFile, $executed, $errors);
+
+$extraFiles = glob(__DIR__ . '/ensure_*.sql') ?: [];
+sort($extraFiles, SORT_NATURAL | SORT_FLAG_CASE);
+
+foreach ($extraFiles as $extraFile) {
+    if (realpath($extraFile) === realpath($compatFile)) {
+        continue;
+    }
+
+    execute_sql_file($pdo, $extraFile, $executed, $errors);
 }
 
 ?>

@@ -19,16 +19,20 @@ function client_ip() {
 function rate_limit_check($key, $maxAttempts, $windowSeconds) {
     $safeKey = preg_replace('/[^a-zA-Z0-9_.:-]/', '_', (string)$key);
     $dir = sys_get_temp_dir() . '/hrms_rate_limits';
-    if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    if (!is_dir($dir)) {
+        mkdir($dir, 0777, true);
+    }
     $file = $dir . '/' . sha1($safeKey) . '.json';
     $now = time();
 
     $payload = ['attempts' => []];
-    if (is_file($file)) {
-        $json = @file_get_contents($file);
-        $decoded = json_decode((string)$json, true);
-        if (is_array($decoded) && isset($decoded['attempts']) && is_array($decoded['attempts'])) {
-            $payload = $decoded;
+    if (is_file($file) && is_readable($file)) {
+        $json = file_get_contents($file);
+        if ($json !== false) {
+            $decoded = json_decode($json, true);
+            if (is_array($decoded) && isset($decoded['attempts']) && is_array($decoded['attempts'])) {
+                $payload = $decoded;
+            }
         }
     }
 
@@ -43,7 +47,7 @@ function rate_limit_check($key, $maxAttempts, $windowSeconds) {
 
     $attempts[] = $now;
     $payload['attempts'] = $attempts;
-    @file_put_contents($file, json_encode($payload));
+    file_put_contents($file, json_encode($payload));
     return true;
 }
 
@@ -59,7 +63,9 @@ function upload_is_allowed(array $file, array $allowedMimeTypes, $maxBytes) {
 }
 
 function store_upload(array $file, $targetDir, $prefix, array $extByMime) {
-    if (!is_dir($targetDir)) @mkdir($targetDir, 0777, true);
+    if (!is_dir($targetDir)) {
+        mkdir($targetDir, 0777, true);
+    }
     $finfo = new finfo(FILEINFO_MIME_TYPE);
     $mime = $finfo->file($file['tmp_name']);
     $ext = $extByMime[$mime] ?? null;

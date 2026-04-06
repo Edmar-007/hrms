@@ -1,9 +1,38 @@
 <?php
 require_once __DIR__ . '/config/db.php';
 
-$isLocal = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
+$isLocal = PHP_SAPI === 'cli' || in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1'], true);
 error_reporting(E_ALL);
 ini_set('display_errors', $isLocal ? '1' : '0');
+
+function hc_table_has_column(PDO $pdo, string $table, string $column): bool
+{
+    static $cache = [];
+    $cacheKey = $table . '.' . $column;
+
+    if (!array_key_exists($cacheKey, $cache)) {
+        try {
+            $st = $pdo->prepare("SHOW COLUMNS FROM `$table` LIKE ?");
+            $st->execute([$column]);
+            $cache[$cacheKey] = (bool) $st->fetch();
+        } catch (Exception $e) {
+            $cache[$cacheKey] = false;
+        }
+    }
+
+    return $cache[$cacheKey];
+}
+
+function hc_count_rows(PDO $pdo, string $table, ?int $companyId = null): int
+{
+    if ($companyId !== null && hc_table_has_column($pdo, $table, 'company_id')) {
+        $st = $pdo->prepare("SELECT COUNT(*) AS cnt FROM `$table` WHERE company_id = ?");
+        $st->execute([$companyId]);
+        return (int) ($st->fetch()['cnt'] ?? 0);
+    }
+
+    return (int) ($pdo->query("SELECT COUNT(*) AS cnt FROM `$table`")->fetch()['cnt'] ?? 0);
+}
 
 $checks = [
     'database' => false,
@@ -61,11 +90,12 @@ try {
 
 // 4. Check seed data
 try {
-    $shifts = $pdo->query("SELECT COUNT(*) as cnt FROM shifts WHERE company_id = 1")->fetch()['cnt'];
-    $structures = $pdo->query("SELECT COUNT(*) as cnt FROM salary_structures WHERE company_id = 1")->fetch()['cnt'];
-    $components = $pdo->query("SELECT COUNT(*) as cnt FROM salary_components WHERE company_id = 1")->fetch()['cnt'];
-    $employees = $pdo->query("SELECT COUNT(*) as cnt FROM employees WHERE company_id = 1")->fetch()['cnt'];
-    $balances = $pdo->query("SELECT COUNT(*) as cnt FROM employee_leave_balance WHERE company_id = 1")->fetch()['cnt'];
+    $companyId = 1;
+    $shifts = hc_count_rows($pdo, 'shifts', $companyId);
+    $structures = hc_count_rows($pdo, 'salary_structures', $companyId);
+    $components = hc_count_rows($pdo, 'salary_components', $companyId);
+    $employees = hc_count_rows($pdo, 'employees', $companyId);
+    $balances = hc_count_rows($pdo, 'employee_leave_balance', $companyId);
 
     $checks['seed_data'] = [
         'shifts' => $shifts,
@@ -79,6 +109,11 @@ try {
 }
 
 // Output results
+$allTablesPresent = count($checks['tables']) > 0 && count(array_filter($checks['tables'])) === count($checks['tables']);
+$hasErrors = !empty($checks['errors']);
+$seedDataCount = array_sum($checks['seed_data']);
+$seedDataStatusClass = $hasErrors ? 'warning' : 'success';
+$overallGood = $checks['database'] && $allTablesPresent && $checks['admin'] && !$hasErrors;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -121,7 +156,7 @@ try {
                 </div>
 
                 <!-- Database Tables -->
-                <div class="health-card <?= count(array_filter($checks['tables'])) === count($checks['tables']) ? 'success' : 'warning' ?>">
+                <div class="health-card <?= $allTablesPresent ? 'success' : 'warning' ?>">
                     <h5>
                         <?= count(array_filter($checks['tables'])) === count($checks['tables']) ? '✓' : '⚠' ?>
                         Database Tables (<?= count(array_filter($checks['tables'])) ?>/<?= count($checks['tables']) ?>)
@@ -129,8 +164,8 @@ try {
 
                     <div class="progress mb-3" style="height: 20px">
                         <div class="progress-bar" role="progressbar"
-                             style="width: <?= (count(array_filter($checks['tables'])) / count($checks['tables']) * 100) ?>%">
-                            <?= round(count(array_filter($checks['tables'])) / count($checks['tables']) * 100) ?>%
+                             style="width: <?= (count(array_filter($checks['tables'])) / max(1, count($checks['tables'])) * 100) ?>%">
+                            <?= round(count(array_filter($checks['tables'])) / max(1, count($checks['tables'])) * 100) ?>%
                         </div>
                     </div>
 
@@ -174,7 +209,7 @@ try {
                 </div>
 
                 <!-- Seed Data -->
-                <div class="health-card success">
+                <div class="health-card <?= $seedDataStatusClass ?>">
                     <h5>✓ Seeded Test Data</h5>
                     <div class="table-responsive">
                         <table class="table table-sm mb-0">
@@ -202,7 +237,7 @@ try {
                                 <tr>
                                     <td><strong>Leave Balances</strong></td>
                                     <td><span class="badge bg-info"><?= $checks['seed_data']['leave_balances'] ?? 0 ?></span></td>
-                                    <td><small class="text-muted">Pre-initialized for 2026</small></td>
+                                    <td><small class="text-muted">Pre-initialized for <?= date('Y') ?></small></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -224,11 +259,6 @@ try {
                 <!-- Overall Status -->
                 <div class="alert alert-info mt-4">
                     <h5><i class="bi bi-info-circle"></i> System Status</h5>
-                    <?php
-                    $overallGood = $checks['database'] &&
-                                   count(array_filter($checks['tables'])) === count($checks['tables']) &&
-                                   $checks['admin'];
-                    ?>
                     <p class="mb-0">
                         <?php if ($overallGood): ?>
                             <strong class="text-success">✓ All Systems Ready</strong><br>

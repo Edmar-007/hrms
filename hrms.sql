@@ -611,7 +611,230 @@ VALUES (1, 10, 8);
 INSERT INTO employee_leave_balance (company_id, employee_id, leave_type_id, year, opening_balance, carried_over)
 SELECT c.id, e.id, lt.id, YEAR(CURDATE()), lt.days_allowed, 0
 FROM employees e
-CROSS JOIN (SELECT DISTINCT company_id as id FROM companies) c
-CROSS JOIN leave_types lt
-WHERE e.company_id = c.id AND lt.company_id = c.id
+JOIN companies c ON e.company_id = c.id
+JOIN leave_types lt ON lt.company_id = c.id
 ON DUPLICATE KEY UPDATE opening_balance = VALUES(opening_balance);
+
+-- =====================================================
+-- PHASE 3 UPDATES
+-- =====================================================
+
+-- Password Reset Tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    user_id INT NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_exp(user_id, expires_at),
+    INDEX idx_company(company_id)
+);
+
+-- Add photo_path to employees
+ALTER TABLE employees
+    ADD COLUMN IF NOT EXISTS photo_path VARCHAR(255) NULL;
+
+-- Add scan tracking columns to attendance
+ALTER TABLE attendance
+    ADD COLUMN IF NOT EXISTS scan_ip VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS user_agent VARCHAR(255) NULL,
+    ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7) NULL,
+    ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7) NULL,
+    ADD COLUMN IF NOT EXISTS last_action ENUM('time_in','break_in','break_out','time_out') NULL,
+    ADD COLUMN IF NOT EXISTS last_scan_at DATETIME NULL;
+
+-- Add attendance policy columns
+ALTER TABLE attendance_settings
+    ADD COLUMN IF NOT EXISTS duplicate_scan_seconds INT DEFAULT 3,
+    ADD COLUMN IF NOT EXISTS require_action_sequence TINYINT(1) DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS gps_capture_enabled TINYINT(1) DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS out_of_shift_grace_before_minutes INT DEFAULT 60,
+    ADD COLUMN IF NOT EXISTS out_of_shift_grace_after_minutes INT DEFAULT 60;
+
+-- Add attachment and cancellation columns to leave_requests
+ALTER TABLE leave_requests
+    ADD COLUMN IF NOT EXISTS attachment_path VARCHAR(255) NULL,
+    ADD COLUMN IF NOT EXISTS cancelled_at DATETIME NULL,
+    ADD COLUMN IF NOT EXISTS cancelled_by INT NULL;
+
+-- =====================================================
+-- CLAIM & REIMBURSEMENT MODULE
+-- =====================================================
+
+-- Claim Categories (expense types)
+CREATE TABLE IF NOT EXISTS claim_categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    max_amount DECIMAL(12,2) DEFAULT NULL,
+    requires_receipt TINYINT(1) DEFAULT 1,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_claim_cat(company_id, name),
+    INDEX idx_company(company_id)
+);
+
+-- Expense Claims (main claims table)
+CREATE TABLE IF NOT EXISTS expense_claims (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    claim_number VARCHAR(50) NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    currency VARCHAR(10) DEFAULT 'PHP',
+    status ENUM('draft','submitted','under_review','approved','rejected','paid','cancelled') DEFAULT 'draft',
+    submitted_at DATETIME NULL,
+    reviewed_by INT NULL,
+    reviewed_at DATETIME NULL,
+    approved_by INT NULL,
+    approved_at DATETIME NULL,
+    paid_at DATETIME NULL,
+    paid_by INT NULL,
+    payment_reference VARCHAR(100),
+    rejection_reason TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_claim_num(company_id, claim_number),
+    INDEX idx_employee(company_id, employee_id),
+    INDEX idx_status(company_id, status),
+    INDEX idx_date(company_id, submitted_at)
+);
+
+-- Claim Items (individual expense line items)
+CREATE TABLE IF NOT EXISTS claim_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    claim_id INT NOT NULL,
+    category_id INT NULL,
+    description VARCHAR(500) NOT NULL,
+    expense_date DATE NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    receipt_path VARCHAR(500),
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_claim(claim_id),
+    INDEX idx_category(category_id),
+    FOREIGN KEY (claim_id) REFERENCES expense_claims(id) ON DELETE CASCADE
+);
+
+-- Claim Approval History
+CREATE TABLE IF NOT EXISTS claim_approvals (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    claim_id INT NOT NULL,
+    user_id INT NOT NULL,
+    action ENUM('submitted','reviewed','approved','rejected','paid','cancelled') NOT NULL,
+    comments TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_claim(claim_id),
+    FOREIGN KEY (claim_id) REFERENCES expense_claims(id) ON DELETE CASCADE
+);
+
+-- =====================================================
+-- COMPENSATION PLANNING MODULE
+-- =====================================================
+
+-- Salary History (track salary changes over time)
+CREATE TABLE IF NOT EXISTS salary_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    previous_salary DECIMAL(12,2),
+    new_salary DECIMAL(12,2) NOT NULL,
+    change_type ENUM('hire','promotion','adjustment','demotion','annual_increase') NOT NULL,
+    change_reason TEXT,
+    effective_date DATE NOT NULL,
+    approved_by INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_employee(company_id, employee_id),
+    INDEX idx_date(effective_date)
+);
+
+-- Bonus Records
+CREATE TABLE IF NOT EXISTS bonus_records (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    bonus_type ENUM('performance','attendance','holiday','referral','signing','retention','other') NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,
+    description TEXT,
+    period_start DATE NULL,
+    period_end DATE NULL,
+    status ENUM('pending','approved','paid','cancelled') DEFAULT 'pending',
+    approved_by INT NULL,
+    approved_at DATETIME NULL,
+    paid_at DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_employee(company_id, employee_id),
+    INDEX idx_type(company_id, bonus_type),
+    INDEX idx_status(status)
+);
+
+-- =====================================================
+-- HR ANALYTICS SUPPORT TABLES
+-- =====================================================
+
+-- Headcount Snapshots (for trend analysis)
+CREATE TABLE IF NOT EXISTS headcount_snapshots (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    snapshot_date DATE NOT NULL,
+    department_id INT NULL,
+    total_employees INT NOT NULL DEFAULT 0,
+    active_employees INT NOT NULL DEFAULT 0,
+    new_hires INT NOT NULL DEFAULT 0,
+    separations INT NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_snapshot(company_id, snapshot_date, department_id),
+    INDEX idx_date(company_id, snapshot_date)
+);
+
+-- Employee Separations (for turnover tracking)
+CREATE TABLE IF NOT EXISTS employee_separations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    separation_type ENUM('resignation','termination','retirement','end_of_contract','death','other') NOT NULL,
+    separation_date DATE NOT NULL,
+    reason TEXT,
+    exit_interview_done TINYINT(1) DEFAULT 0,
+    exit_interview_notes TEXT,
+    rehire_eligible TINYINT(1) DEFAULT 1,
+    processed_by INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_employee(company_id, employee_id),
+    INDEX idx_date(company_id, separation_date),
+    INDEX idx_type(company_id, separation_type)
+);
+
+-- =====================================================
+-- DEFAULT DATA FOR NEW MODULES
+-- =====================================================
+
+-- Default Claim Categories
+INSERT INTO claim_categories (company_id, name, description, max_amount, requires_receipt) VALUES
+(1, 'Transportation', 'Travel and transportation expenses', 5000.00, 1),
+(1, 'Meals', 'Business meals and entertainment', 2000.00, 1),
+(1, 'Office Supplies', 'Office supplies and materials', 1000.00, 1),
+(1, 'Communication', 'Phone, internet, and communication expenses', 1500.00, 0),
+(1, 'Training', 'Training and professional development', 10000.00, 1),
+(1, 'Medical', 'Medical expenses not covered by insurance', 5000.00, 1),
+(1, 'Other', 'Other business-related expenses', NULL, 1);
+
+-- Add features column to companies if not exists
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS features JSON DEFAULT NULL;
+
+-- Update company features to include new modules
+UPDATE companies SET features = JSON_SET(
+    COALESCE(features, '{}'),
+    '$.claims', true,
+    '$.analytics', true,
+    '$.compensation', true,
+    '$.attendance', true,
+    '$.leaves', true,
+    '$.payroll', true,
+    '$.reports', true
+) WHERE id = 1;

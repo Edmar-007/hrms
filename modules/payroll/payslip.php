@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/../../config/db.php';
 require_once __DIR__.'/../../includes/auth.php';
+require_once __DIR__.'/../../includes/payroll-helpers.php';
 require_once __DIR__.'/../../includes/header.php';
 require_once __DIR__.'/../../includes/nav.php';
 require_login();
@@ -17,7 +18,7 @@ $emp = $pdo->prepare("SELECT e.*, d.name as dept_name, p.name as pos_name
 $emp->execute([$id]);
 $emp = $emp->fetch();
 
-if(!$emp) { header("Location: index.php"); exit; }
+if(!$emp) { redirect('/modules/payroll/index.php'); }
 
 $periodStart = $month . '-01';
 $periodEnd   = date('Y-m-t', strtotime($periodStart));
@@ -67,7 +68,7 @@ if ($payrollRecord) {
     <h4><i class="bi bi-file-earmark-text me-2"></i>Payslip</h4>
     <div>
         <button onclick="window.print()" class="btn btn-primary"><i class="bi bi-printer me-2"></i>Print</button>
-        <a href="index.php?month=<?= $month ?>" class="btn btn-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
+        <a href="<?= url('/modules/payroll/index.php?month=' . e($month)) ?>" class="btn btn-secondary"><i class="bi bi-arrow-left me-2"></i>Back</a>
     </div>
 </div>
 

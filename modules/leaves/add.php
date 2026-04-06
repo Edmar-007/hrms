@@ -7,7 +7,15 @@ require_once __DIR__.'/../../includes/validator.php';
 require_login();
 
 if(is_post() && verify_csrf()) {
+    $u = $_SESSION['user'];
+    $canApprove = in_array($u['role'], ['Admin', 'HR Officer', 'Manager']);
+    
+    // Allow Admin/HR/Manager to submit on behalf of an employee
     $empId = $_SESSION['user']['employee_id'] ?? null;
+    if ($canApprove && !empty($_POST['employee_id'])) {
+        $empId = (int)$_POST['employee_id'];
+    }
+    
     $typeId = intval($_POST['leave_type_id'] ?? 0);
     $start = $_POST['start_date'] ?? '';
     $end = $_POST['end_date'] ?? '';
@@ -57,7 +65,6 @@ if(is_post() && verify_csrf()) {
             exit;
         }
     } else {
-        // Missing required fields or invalid dates
         header("Location: index.php?msg=error");
         exit;
     }
