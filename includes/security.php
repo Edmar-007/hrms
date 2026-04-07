@@ -1,77 +1,63 @@
 <?php
+require_once __DIR__ . '/../config/config.php';
 
-function client_ip() {
-    $headers = [
-        'HTTP_CF_CONNECTING_IP',
-        'HTTP_X_FORWARDED_FOR',
-        'HTTP_X_REAL_IP',
-        'REMOTE_ADDR'
-    ];
-    foreach ($headers as $h) {
-        if (!empty($_SERVER[$h])) {
-            $raw = trim(explode(',', (string)$_SERVER[$h])[0]);
-            if (filter_var($raw, FILTER_VALIDATE_IP)) return $raw;
-        }
-    }
-    return '0.0.0.0';
-}
+if (!function_exists('client_ip')) {
+    function client_ip(): string
+    {
+        $candidates = [
+            $_SERVER['HTTP_CF_CONNECTING_IP'] ?? null,
+            $_SERVER['HTTP_X_FORWARDED_FOR'] ?? null,
+            $_SERVER['REMOTE_ADDR'] ?? null,
+        ];
 
-function rate_limit_check($key, $maxAttempts, $windowSeconds) {
-    $safeKey = preg_replace('/[^a-zA-Z0-9_.:-]/', '_', (string)$key);
-    $dir = sys_get_temp_dir() . '/hrms_rate_limits';
-    if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
-    }
-    $file = $dir . '/' . sha1($safeKey) . '.json';
-    $now = time();
+        foreach ($candidates as $candidate) {
+            if (!is_string($candidate) || trim($candidate) === '') {
+                continue;
+            }
 
-    $payload = ['attempts' => []];
-    if (is_file($file) && is_readable($file)) {
-        $json = file_get_contents($file);
-        if ($json !== false) {
-            $decoded = json_decode($json, true);
-            if (is_array($decoded) && isset($decoded['attempts']) && is_array($decoded['attempts'])) {
-                $payload = $decoded;
+            $ip = trim(explode(',', $candidate)[0]);
+            if (filter_var($ip, FILTER_VALIDATE_IP)) {
+                return $ip;
             }
         }
+
+        return '127.0.0.1';
     }
-
-    $cutoff = $now - (int)$windowSeconds;
-    $attempts = array_values(array_filter($payload['attempts'], function($ts) use ($cutoff) {
-        return is_int($ts) && $ts >= $cutoff;
-    }));
-
-    if (count($attempts) >= (int)$maxAttempts) {
-        return false;
-    }
-
-    $attempts[] = $now;
-    $payload['attempts'] = $attempts;
-    file_put_contents($file, json_encode($payload));
-    return true;
 }
 
-function upload_is_allowed(array $file, array $allowedMimeTypes, $maxBytes) {
-    if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) return [false, 'Upload failed'];
-    if (($file['size'] ?? 0) <= 0 || (int)$file['size'] > (int)$maxBytes) return [false, 'Invalid file size'];
-    if (!is_uploaded_file($file['tmp_name'] ?? '')) return [false, 'Invalid upload source'];
+if (!function_exists('rate_limit_check')) {
+    function rate_limit_check(string $key, int $limit, int $windowSeconds): bool
+    {
+        $dir = __DIR__ . '/../.cache/rate_limits';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
 
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($file['tmp_name']);
-    if (!in_array($mime, $allowedMimeTypes, true)) return [false, 'File type not allowed'];
-    return [true, $mime];
-}
+        $file = $dir . '/' . sha1($key) . '.json';
+        $now = time();
+        $state = ['window_start' => $now, 'count' => 0];
 
-function store_upload(array $file, $targetDir, $prefix, array $extByMime) {
-    if (!is_dir($targetDir)) {
-        mkdir($targetDir, 0777, true);
+        if (is_file($file)) {
+            $decoded = json_decode((string)file_get_contents($file), true);
+            if (is_array($decoded)) {
+                $state = array_merge($state, $decoded);
+            }
+        }
+
+        $windowStart = (int)($state['window_start'] ?? $now);
+        $count = (int)($state['count'] ?? 0);
+
+        if (($now - $windowStart) >= $windowSeconds) {
+            $windowStart = $now;
+            $count = 0;
+        }
+
+        $count++;
+        file_put_contents($file, json_encode([
+            'window_start' => $windowStart,
+            'count' => $count,
+        ]));
+
+        return $count <= $limit;
     }
-    $finfo = new finfo(FILEINFO_MIME_TYPE);
-    $mime = $finfo->file($file['tmp_name']);
-    $ext = $extByMime[$mime] ?? null;
-    if (!$ext) return null;
-    $name = $prefix . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-    $dest = rtrim($targetDir, '/').'/'.$name;
-    if (!move_uploaded_file($file['tmp_name'], $dest)) return null;
-    return $name;
 }

@@ -5,7 +5,7 @@ require_once __DIR__.'/../includes/csrf.php';
 require_once __DIR__.'/../includes/auth.php';
 require_once __DIR__.'/../includes/security.php';
 
-if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/modules/dashboard.php"); exit; }
+if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/dashboard"); exit; }
 
 $uid = (int)($_GET['uid'] ?? $_POST['uid'] ?? 0);
 $token = trim($_GET['token'] ?? $_POST['token'] ?? '');

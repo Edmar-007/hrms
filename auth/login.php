@@ -3,7 +3,7 @@ require_once __DIR__.'/../config/db.php';
 require_once __DIR__.'/../includes/functions.php';
 require_once __DIR__.'/../includes/csrf.php';
 require_once __DIR__.'/../includes/security.php';
-if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/modules/dashboard.php"); exit; }
+if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/dashboard"); exit; }
 
 $err = '';
 
@@ -72,7 +72,7 @@ if(is_post()){
           $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?")->execute([$u['id']]);
       } catch(Exception $e) { /* Column may not exist in old schema */ }
       
-      header("Location: ".BASE_URL."/modules/dashboard.php"); exit;
+      header("Location: ".BASE_URL."/dashboard"); exit;
     }
     $err="Invalid email or password";
   } catch(PDOException $e) {
@@ -111,7 +111,7 @@ if(is_post()){
                 
                 <?php if(!empty($err)): ?>
                 <div class="alert alert-danger d-flex align-items-center gap-2 mb-3">
-                    <i class="bi bi-exclamation-circle-fill flex-shrink-0"></i>
+                    <i class="bi bi-exclamation-circle-fill shrink-0"></i>
                     <div><?= e($err) ?></div>
                 </div>
                 <?php endif; ?>

@@ -125,7 +125,7 @@ foreach ($extraFiles as $extraFile) {
                 </ul>
 
                 <div class="mt-4">
-                    <a href="<?= BASE_URL ?>/modules/dashboard.php" class="btn btn-primary">
+                    <a href="<?= BASE_URL ?>/dashboard" class="btn btn-primary">
                         <i class="bi bi-arrow-left"></i> Back to Dashboard
                     </a>
                 </div>

@@ -1,51 +1,26 @@
-# OS and Editor files
+# Dependencies
+node_modules/
+vendor/
+
+# Cache & temp files
 .cache/
-.vscode/
-.tmp*/
 .tmp-edge-profile/
-.DS_Store
-Thumbs.db
-
-# Replit and deployment files
-.replit
-replit.*
-replit.nix
-start.sh
-
-# Logs and runtime data
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+*.tmp
+*.session.sql
 
-# Uploads (keep structure, ignore contents except logos)
-public/uploads/*
-!public/uploads/logos/
+# IDE
+.vscode/
+.idea/
 
-# Environment and backups
+# Environment
 .env
 .env.local
-.env.*.local
-*.sql~
-hrms.sql.backup*
-migration_v2.sql  # if temp
 
-# PHP temp files
-*.php~
-*.bak
-cleanup.php
-create_dirs.php
-password_hash*
-8)
+# Session files
+sessions/
 
-# IDE settings
-.idea/
-*.swp
-*.swo
+# Uploads (optional)
+public/uploads/*
+!public/uploads/.gitkeep
 
-# Dependencies
-vendor/
-node_modules/
-
-# OS generated
-Desktop.ini

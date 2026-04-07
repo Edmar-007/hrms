@@ -1,51 +1,65 @@
 <?php
-require_once __DIR__.'/../config/config.php';
-require_once __DIR__.'/functions.php';
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/functions.php';
 
-function user() {
-    return $_SESSION['user'] ?? null;
-}
+if (!function_exists('is_json_request')) {
+    function is_json_request(): bool
+    {
+        $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+        $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+        $uri = strtolower((string)($_SERVER['REQUEST_URI'] ?? ''));
 
-function require_login() {
-    if(empty($_SESSION['user'])) redirect('/auth/login.php');
-}
-
-function require_role($roles = []) {
-    require_login();
-    if(!in_array($_SESSION['user']['role'], $roles)) {
-        http_response_code(403);
-        exit('Forbidden');
+        return str_contains($accept, 'application/json')
+            || str_contains($contentType, 'application/json')
+            || str_contains($uri, '/api/');
     }
 }
 
-function has_feature($feature) {
-    $company = company();
-    if(!$company) return false;
-    $features = json_decode($company['features'] ?? '{}', true);
-    return $features[$feature] ?? false;
+if (!function_exists('require_login')) {
+    function require_login(): void
+    {
+        if (!empty($_SESSION['user'])) {
+            return;
+        }
+
+        if (is_json_request()) {
+            json_response(['error' => 'Unauthorized'], 401);
+        }
+
+        header('Location: ' . BASE_URL . '/auth/login.php');
+        exit;
+    }
 }
 
-function log_activity($action, $entityType = null, $entityId = null, $details = null) {
-    global $pdo;
-    try {
-        $companyId = company_id() ?? 1;
-        $userId = $_SESSION['user']['id'] ?? null;
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-        
-        $st = $pdo->prepare("INSERT INTO activity_logs (company_id, user_id, action, entity_type, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $st->execute([$companyId, $userId, $action, $entityType, $entityId, json_encode($details), $ip]);
-    } catch(Exception $e) { /* Table may not exist */ }
+if (!function_exists('has_role')) {
+    function has_role(array|string $roles): bool
+    {
+        $user = current_user();
+        if (!$user) {
+            return false;
+        }
+
+        $role = (string)($user['role'] ?? '');
+        $allowedRoles = is_array($roles) ? $roles : [$roles];
+        return in_array($role, $allowedRoles, true);
+    }
 }
 
-function notify($userId, $type, $title, $message = '', $link = '') {
-    global $pdo;
-    try {
-        $companyId = company_id() ?? 1;
-        $st = $pdo->prepare("INSERT INTO notifications (company_id, user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?, ?)");
-        $st->execute([$companyId, $userId, $type, $title, $message, $link]);
-    } catch(Exception $e) { /* Table may not exist */ }
-}
+if (!function_exists('require_role')) {
+    function require_role(array|string $roles): void
+    {
+        require_login();
 
-function get_theme() {
-    return $_SESSION['user']['theme'] ?? 'light';
+        if (has_role($roles)) {
+            return;
+        }
+
+        if (is_json_request()) {
+            json_response(['error' => 'Forbidden'], 403);
+        }
+
+        http_response_code(403);
+        echo 'Forbidden';
+        exit;
+    }
 }

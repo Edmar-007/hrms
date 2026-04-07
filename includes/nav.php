@@ -10,7 +10,6 @@ $companyLogo = $company['logo_url'] ?? '';
 $companyPlanLabel = !empty($company['plan']) ? ucfirst((string) $company['plan']) . ' workspace' : 'Live workspace';
 ?>
 <?php if($u): ?>
-<!-- Mobile Header -->
 <div class="mobile-header d-lg-none" id="mobileHeader">
     <button class="sidebar-toggle-btn" id="sidebarToggle" type="button" aria-label="Toggle sidebar">
         <i class="bi bi-list fs-5"></i>
@@ -29,11 +28,7 @@ $companyPlanLabel = !empty($company['plan']) ? ucfirst((string) $company['plan']
         </button>
     </div>
 </div>
-
-<!-- Sidebar Backdrop (mobile) -->
 <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
-
-<!-- Sidebar — NO offcanvas-lg; custom mobile toggle instead -->
 <aside class="sidebar <?= $sidebarColor !== 'default' ? 'sidebar-'.$sidebarColor : '' ?>" id="sidebar">
     <div class="sidebar-header">
         <?php if($companyLogo): ?>
@@ -50,95 +45,63 @@ $companyPlanLabel = !empty($company['plan']) ? ucfirst((string) $company['plan']
             <i class="bi bi-layout-sidebar-inset"></i>
         </button>
     </div>
-    
     <nav class="sidebar-nav">
         <div class="nav-section-label">MAIN MENU</div>
-        
         <a href="<?= BASE_URL ?>/modules/dashboard.php" class="nav-item <?= $currentPage==='dashboard.php'?'active':'' ?>">
-            <i class="bi bi-speedometer2"></i>
-            <span>Dashboard</span>
+            <i class="bi bi-speedometer2"></i><span>Dashboard</span>
         </a>
-        
         <a href="<?= BASE_URL ?>/modules/employees/index.php" class="nav-item <?= $currentDir==='employees'?'active':'' ?>">
-            <i class="bi bi-people-fill"></i>
-            <span>Employees</span>
+            <i class="bi bi-people-fill"></i><span>Employees</span>
         </a>
-        
         <a href="<?= BASE_URL ?>/modules/attendance/index.php" class="nav-item <?= $currentDir==='attendance'?'active':'' ?>">
-            <i class="bi bi-qr-code-scan"></i>
-            <span>Attendance</span>
+            <i class="bi bi-qr-code-scan"></i><span>Attendance</span>
         </a>
-        
         <a href="<?= BASE_URL ?>/modules/leaves/index.php" class="nav-item <?= $currentDir==='leaves'?'active':'' ?>">
-            <i class="bi bi-calendar-event-fill"></i>
-            <span>Leave Requests</span>
+            <i class="bi bi-calendar-event-fill"></i><span>Leave Requests</span>
         </a>
-
         <a href="<?= BASE_URL ?>/modules/claims/index.php" class="nav-item <?= $currentDir==='claims'?'active':'' ?>">
-            <i class="bi bi-receipt"></i>
-            <span>Expense Claims</span>
+            <i class="bi bi-receipt"></i><span>Expense Claims</span>
         </a>
-
         <a href="<?= BASE_URL ?>/modules/profile/index.php" class="nav-item <?= $currentDir==='profile'?'active':'' ?>">
-            <i class="bi bi-person-circle"></i>
-            <span>My Profile</span>
+            <i class="bi bi-person-circle"></i><span>My Profile</span>
         </a>
-
         <?php if(($features['payroll'] ?? true) && !in_array($u['role'], ['Admin','HR Officer'])): ?>
         <a href="<?= BASE_URL ?>/modules/payroll/my-summary.php" class="nav-item <?= $currentPage==='my-summary.php'?'active':'' ?>">
-            <i class="bi bi-cash-coin"></i>
-            <span>My Payroll</span>
+            <i class="bi bi-cash-coin"></i><span>My Payroll</span>
         </a>
         <?php endif; ?>
-        
         <?php if(in_array($u['role'], ['Admin', 'HR Officer'])): ?>
         <div class="nav-section-label">MANAGEMENT</div>
-
         <?php if($u['role'] === 'Admin'): ?>
         <a href="<?= BASE_URL ?>/modules/users/index.php" class="nav-item <?= $currentDir==='users'?'active':'' ?>">
-            <i class="bi bi-person-gear"></i>
-            <span>User Accounts</span>
+            <i class="bi bi-person-gear"></i><span>User Accounts</span>
         </a>
         <?php endif; ?>
-        
         <?php if($features['payroll'] ?? true): ?>
         <a href="<?= BASE_URL ?>/modules/payroll/index.php" class="nav-item <?= $currentDir==='payroll'?'active':'' ?>">
-            <i class="bi bi-wallet2"></i>
-            <span>Payroll</span>
+            <i class="bi bi-wallet2"></i><span>Payroll</span>
         </a>
         <?php endif; ?>
-        
         <?php if($features['reports'] ?? true): ?>
         <a href="<?= BASE_URL ?>/modules/reports/index.php" class="nav-item <?= $currentDir==='reports'?'active':'' ?>">
-            <i class="bi bi-bar-chart-fill"></i>
-            <span>Reports</span>
+            <i class="bi bi-bar-chart-fill"></i><span>Reports</span>
         </a>
         <?php endif; ?>
-
         <a href="<?= BASE_URL ?>/modules/analytics/index.php" class="nav-item <?= $currentDir==='analytics'?'active':'' ?>">
-            <i class="bi bi-graph-up"></i>
-            <span>HR Analytics</span>
+            <i class="bi bi-graph-up"></i><span>HR Analytics</span>
         </a>
-
         <a href="<?= BASE_URL ?>/modules/compensation/index.php" class="nav-item <?= $currentDir==='compensation'?'active':'' ?>">
-            <i class="bi bi-currency-dollar"></i>
-            <span>Compensation</span>
+            <i class="bi bi-currency-dollar"></i><span>Compensation</span>
         </a>
-
         <a href="<?= BASE_URL ?>/modules/audit/logs.php" class="nav-item <?= $currentDir==='audit'?'active':'' ?>">
-            <i class="bi bi-journal-text"></i>
-            <span>Audit Logs</span>
+            <i class="bi bi-journal-text"></i><span>Audit Logs</span>
         </a>
-        
         <div class="nav-section-label">SYSTEM</div>
-        
         <a href="<?= BASE_URL ?>/modules/settings/index.php" class="nav-item <?= $currentDir==='settings'?'active':'' ?>">
-            <i class="bi bi-gear-fill"></i>
-            <span>Settings</span>
+            <i class="bi bi-gear-fill"></i><span>Settings</span>
         </a>
         <?php endif; ?>
     </nav>
-    
     <div class="sidebar-footer">
         <div class="user-info">
             <div class="avatar"><?= strtoupper(substr($u['name'] ?: $u['email'], 0, 1)) ?></div>
@@ -157,10 +120,7 @@ $companyPlanLabel = !empty($company['plan']) ? ucfirst((string) $company['plan']
         </div>
     </div>
 </aside>
-
-<!-- Main Content Wrapper -->
 <main class="main-content" id="mainContent">
-    <!-- Top Bar (desktop only) -->
     <div class="top-bar d-none d-lg-flex">
         <div class="top-bar-meta">
             <div class="top-bar-title-group">
@@ -177,31 +137,6 @@ $companyPlanLabel = !empty($company['plan']) ? ucfirst((string) $company['plan']
             <button class="topbar-icon-btn" onclick="toggleTheme()" title="Toggle theme" type="button">
                 <i class="bi bi-<?= ($u['theme']??'light')==='dark'?'sun':'moon' ?>" data-theme-icon></i>
             </button>
-            <div class="dropdown">
-                <button class="topbar-icon-btn position-relative" data-bs-toggle="dropdown" aria-label="Notifications">
-                    <i class="bi bi-bell fs-5"></i>
-                    <span class="notification-badge" id="notif-count"></span>
-                </button>
-                <div class="dropdown-menu dropdown-menu-end notification-dropdown">
-                    <div class="notif-header">
-                        <span class="fw-700">Notifications</span>
-                        <a href="#" class="small text-primary text-decoration-none" onclick="markAllRead()">Mark all read</a>
-                    </div>
-                    <div id="notification-list">
-                        <div class="notif-empty">
-                            <i class="bi bi-bell-slash d-block mb-2 fs-3"></i>
-                            No notifications yet
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="topbar-user">
-                <div class="topbar-avatar"><?= strtoupper(substr($u['name'] ?: $u['email'], 0, 1)) ?></div>
-                <div class="topbar-user-info">
-                    <div class="topbar-name"><?= e(explode(' ', $u['name'] ?: $u['email'])[0]) ?></div>
-                    <div class="topbar-role"><?= e($u['role']) ?></div>
-                </div>
-            </div>
         </div>
     </div>
 <?php endif; ?>
