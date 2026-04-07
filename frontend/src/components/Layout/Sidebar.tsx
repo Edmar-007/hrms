@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAppearance } from '@/hooks/useAppearance'
 import { navSections } from './navConfig'
+import { usePrefetchHRMS } from '@/hooks/useHRMSData'
 
 interface SidebarProps {
   collapsed: boolean
@@ -9,6 +10,7 @@ interface SidebarProps {
 export default function Sidebar({ collapsed }: SidebarProps) {
   const { isLoading } = useAppearance()
   const location = useLocation()
+  const { prefetch } = usePrefetchHRMS()
 
   if (isLoading) return null
 
@@ -53,6 +55,7 @@ export default function Sidebar({ collapsed }: SidebarProps) {
                         : 'app-sidebar-link',
                     ].join(' ')}
                     key={item.label}
+                    onMouseEnter={() => prefetch(item.to)}
                     title={collapsed ? item.label : undefined}
                     to={item.to}
                   >

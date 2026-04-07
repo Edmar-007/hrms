@@ -24,7 +24,7 @@ $assetBase = BASE_URL . '/dist';
 $replacements = [
     'href="/assets/' => 'href="' . $assetBase . '/assets/',
     'src="/assets/' => 'src="' . $assetBase . '/assets/',
-    'href="/vite.svg"' => 'href="data:,"',
+    'href="/vite.svg"' => 'href="' . $assetBase . '/vite.svg"',
 ];
 
 $html = strtr($html, $replacements);
