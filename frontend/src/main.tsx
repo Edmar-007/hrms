@@ -10,8 +10,10 @@ import { BrowserRouter } from 'react-router-dom'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 min
+      staleTime: 60 * 60 * 1000, // 1 hour for "Instant Cache"
+      gcTime: 24 * 60 * 60 * 1000, // 24 hours
       retry: 1,
+      refetchOnWindowFocus: false,
     },
   },
 })

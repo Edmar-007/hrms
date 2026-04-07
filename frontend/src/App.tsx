@@ -1,26 +1,37 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import Layout from '@/components/Layout/Layout'
 import { useAuth } from '@/hooks/useAuth'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { usePrefetchHRMS } from '@/hooks/useHRMSData'
 
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Login = lazy(() => import('./pages/Login'))
-const Employees = lazy(() => import('./pages/Employees'))
-const Attendance = lazy(() => import('./pages/Attendance'))
-const LeaveRequests = lazy(() => import('./pages/LeaveRequests'))
-const ExpenseClaims = lazy(() => import('./pages/ExpenseClaims'))
-const Profile = lazy(() => import('./pages/Profile'))
-const UserAccounts = lazy(() => import('./pages/UserAccounts'))
-const Payroll = lazy(() => import('./pages/Payroll'))
-const Reports = lazy(() => import('./pages/Reports'))
-const HRAnalytics = lazy(() => import('./pages/HRAnalytics'))
-const Compensation = lazy(() => import('./pages/Compensation'))
-const AuditLogs = lazy(() => import('./pages/AuditLogs'))
-const Settings = lazy(() => import('./pages/Settings'))
+// Eager imports for "Instant Load"
+import Dashboard from './pages/Dashboard'
+import Employees from './pages/Employees'
+import Attendance from './pages/Attendance'
+import Login from './pages/Login'
+import LeaveRequests from './pages/LeaveRequests'
+import ExpenseClaims from './pages/ExpenseClaims'
+import Profile from './pages/Profile'
+import UserAccounts from './pages/UserAccounts'
+import Payroll from './pages/Payroll'
+import Reports from './pages/Reports'
+import HRAnalytics from './pages/HRAnalytics'
+import Compensation from './pages/Compensation'
+import AuditLogs from './pages/AuditLogs'
+import Settings from './pages/Settings'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
+  const { prefetch } = usePrefetchHRMS()
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Background prefetch all core data immediately on login
+      prefetch('/employees')
+      prefetch('/attendance')
+    }
+  }, [isAuthenticated, prefetch])
   
   if (isLoading) return <LoadingSpinner />
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
@@ -61,4 +72,3 @@ function App() {
 }
 
 export default App
-

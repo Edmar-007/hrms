@@ -5,6 +5,7 @@ import TablePagination from '@/components/ui/table-pagination'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 import { toast } from 'react-hot-toast'
 import api from '@/lib/api'
+import { useEmployees } from '@/hooks/useHRMSData'
 import { useSearchParams } from 'react-router-dom'
 import AppModal from '@/components/ui/app-modal'
 import QRCode from 'qrcode'
@@ -52,11 +53,26 @@ export default function Employees() {
   ].join(' ')
 
   const [query, setQuery] = useState('')
-  const [employees, setEmployees] = useState<Employee[]>(initialEmployees)
+  const debouncedQuery = useDebouncedValue(query, 300)
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(10)
-  const [totalEmployees, setTotalEmployees] = useState(initialEmployees.length)
-  const [isLoadingEmployees, setIsLoadingEmployees] = useState(true)
+  const [pageSize, setPageSize] = useState(20)
+
+  const { data, isLoading: isLoadingEmployees, refetch: loadEmployees } = useEmployees({
+    page,
+    limit: pageSize,
+    search: debouncedQuery.trim(),
+  })
+
+  const [employees, setEmployees] = useState<Employee[]>(initialEmployees)
+  const [totalEmployees, setTotalEmployees] = useState(0)
+
+  useEffect(() => {
+    if (data) {
+      setEmployees(Array.isArray(data.employees) ? data.employees : [])
+      setTotalEmployees(Number(data.total ?? 0))
+    }
+  }, [data])
+
   const [isSaving, setIsSaving] = useState(false)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [qrEmployee, setQrEmployee] = useState<Employee | null>(null)
@@ -64,7 +80,7 @@ export default function Employees() {
   const [isGeneratingQr, setIsGeneratingQr] = useState(false)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
-  const debouncedQuery = useDebouncedValue(query, 300)
+  
   const [formData, setFormData] = useState<EmployeeFormData>({
     name: '',
     email: '',
@@ -83,39 +99,6 @@ export default function Employees() {
     })
     setIsEditMode(false)
   }
-
-  const loadEmployees = async (nextPage = page, nextPageSize = pageSize, nextSearch = debouncedQuery.trim()) => {
-    try {
-      setIsLoadingEmployees(true)
-      const { data } = await api.get('/employees.php', {
-        params: {
-          page: nextPage,
-          limit: nextPageSize,
-          search: nextSearch || undefined,
-        },
-      })
-      const incoming = Array.isArray(data?.employees)
-        ? (data.employees as Employee[])
-        : []
-      const total = Number(data?.total ?? 0)
-      const lastPage = Math.max(1, Math.ceil(total / nextPageSize))
-      setEmployees(incoming)
-      setTotalEmployees(total)
-      if (nextPage > lastPage) {
-        setPage(lastPage)
-      }
-    } catch {
-      toast.error('Unable to load employees from server.')
-      setEmployees([])
-      setTotalEmployees(0)
-    } finally {
-      setIsLoadingEmployees(false)
-    }
-  }
-
-  useEffect(() => {
-    void loadEmployees(page, pageSize, debouncedQuery.trim())
-  }, [page, pageSize, debouncedQuery])
 
   useEffect(() => {
     if (searchParams.get('quickAdd') === 'employee') {
@@ -186,7 +169,7 @@ export default function Employees() {
     try {
       setIsSaving(true)
       await api.delete('/employees.php', { data: { id: employee.id } })
-      await loadEmployees(page, pageSize, debouncedQuery.trim())
+      await loadEmployees()
       toast.success(`${employee.name} is now inactive.`)
     } catch {
       toast.error('Unable to deactivate employee.')
@@ -212,12 +195,12 @@ export default function Employees() {
             id: selectedEmployee.id,
             ...formData,
           })
-          await loadEmployees(page, pageSize, debouncedQuery.trim())
+          await loadEmployees()
           toast.success('Employee updated.')
         } else {
           await api.post('/employees.php', formData)
           setPage(1)
-          await loadEmployees(1, pageSize, debouncedQuery.trim())
+          await loadEmployees()
           toast.success('Employee added.')
         }
 
