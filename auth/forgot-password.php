@@ -6,7 +6,7 @@ require_once __DIR__.'/../includes/auth.php';
 require_once __DIR__.'/../includes/security.php';
 require_once __DIR__.'/../includes/validator.php';
 
-if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/modules/dashboard.php"); exit; }
+if(!empty($_SESSION['user'])) { header("Location: ".BASE_URL."/dashboard"); exit; }
 
 $msg = '';
 $err = '';
@@ -39,7 +39,13 @@ if (is_post()) {
                         ->execute([$companyId, $u['id'], $tokenHash, $expires]);
 
                     log_activity('password_reset_requested', 'user', (int)$u['id'], ['email' => $u['email']]);
-                    $_SESSION['password_reset_link'] = BASE_URL . '/auth/reset-password.php?token=' . urlencode($token) . '&uid=' . (int)$u['id'];
+                    $_SESSION['password_reset_link'] = BASE_URL
+                        . '/auth/reset-password.php'
+                        . '?'
+                        . http_build_query([
+                            'token' => $token,
+                            'uid' => (int)$u['id'],
+                        ]);
                 }
                 $msg = 'If the account exists, a password reset link has been generated.';
             } catch (Exception $e) {

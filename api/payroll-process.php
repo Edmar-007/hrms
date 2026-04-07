@@ -1,6 +1,7 @@
 <?php
-require_once __DIR__.'/../../config/db.php';
-require_once __DIR__.'/../../includes/auth.php';
+require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 header('Content-Type: application/json');
 
@@ -9,13 +10,56 @@ if (empty($_SESSION['user'])) {
     exit(json_encode(["error" => "Unauthorized"]));
 }
 
-require_role(['Admin', 'HR Officer']);
-
 $action = $_GET['action'] ?? 'calculate';
 $cid = company_id() ?? 1;
 
 try {
+    if ($action === 'list') {
+        $stmt = $pdo->prepare(
+            "SELECT
+                DATE(pr.payroll_period_start) AS payroll_period_start,
+                DATE(pr.payroll_period_end) AS payroll_period_end,
+                COUNT(*) AS employee_count,
+                SUM(pr.net_pay) AS total_net_pay,
+                MAX(pr.processed_at) AS processed_at,
+                MAX(pr.created_at) AS created_at,
+                COALESCE(
+                    MAX(CASE WHEN u.id IS NOT NULL THEN CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) END),
+                    'System'
+                ) AS prepared_by,
+                MAX(pr.status) AS status
+             FROM payroll_records pr
+             LEFT JOIN users u ON u.id = pr.processed_by
+             LEFT JOIN employees e ON e.id = u.employee_id
+             WHERE pr.company_id = ?
+             GROUP BY DATE(pr.payroll_period_start), DATE(pr.payroll_period_end)
+             ORDER BY DATE(pr.payroll_period_start) DESC
+             LIMIT 24"
+        );
+        $stmt->execute([$cid]);
+        $runs = $stmt->fetchAll() ?: [];
+
+        exit(json_encode([
+            'success' => true,
+            'runs' => array_map(function ($run) {
+                return [
+                    'id' => 'PR-' . date('Ym', strtotime((string)$run['payroll_period_start'])),
+                    'periodStart' => (string)$run['payroll_period_start'],
+                    'periodEnd' => (string)$run['payroll_period_end'],
+                    'preparedBy' => trim((string)$run['prepared_by']) !== '' ? trim((string)$run['prepared_by']) : 'System',
+                    'employees' => (int)$run['employee_count'],
+                    'amount' => (float)$run['total_net_pay'],
+                    'status' => (string)$run['status'],
+                    'processedAt' => (string)($run['processed_at'] ?? ''),
+                    'createdAt' => (string)($run['created_at'] ?? ''),
+                ];
+            }, $runs),
+        ]));
+    }
+
     if ($action === 'process') {
+        require_role(['Admin', 'HR Officer']);
+
         // Process payroll for a given month
         $month = $_POST['month'] ?? date('Y-m');
         $processedCount = 0;
